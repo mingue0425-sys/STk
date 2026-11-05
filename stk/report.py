@@ -121,14 +121,16 @@ LEVEL_KIND = {"target": "목표가", "stop": "손절가"}
 
 
 def level_headers(fc: Forecast) -> list[str]:
-    return ["구분", "가격", "현재가 대비", "기간 중 도달", "만기 유지", "도달 시점(중앙)"] + [lbl for lbl, _ in fc.checkpoints]
+    return ["구분", "가격", "현재가 대비", "도달(장중/종가)", "만기 유지", "도달 시점(중앙)"] + [lbl for lbl, _ in fc.checkpoints]
 
 
 def level_rows(fc: Forecast) -> list[list[str]]:
     rows = []
     for lv in fc.levels:
         rows.append(
-            [LEVEL_KIND[lv.kind], money(lv.level), pct(lv.rel), pct(lv.prob_touch, False, 0),
+            [LEVEL_KIND[lv.kind], money(lv.level), pct(lv.rel),
+             f"{pct(lv.prob_touch, False, 0)} / {pct(lv.prob_touch_close, False, 0)}" if lv.prob_touch_close is not None
+             else pct(lv.prob_touch, False, 0),
              pct(lv.prob_end_beyond, False, 0), f"{lv.median_days:.0f}거래일" if lv.median_days else "-"]
             + [pct(lv.prob_by[lbl], False, 0) for lbl, _ in fc.checkpoints]
         )
@@ -143,6 +145,7 @@ def race_text(fc: Forecast) -> str | None:
         f"목표가 {money(r['target'])} 먼저 도달 {pct(r['target_first'], False, 0)}  ·  "
         f"손절가 {money(r['stop'])} 먼저 도달 {pct(r['stop_first'], False, 0)}  ·  "
         f"기간 내 둘 다 미도달 {pct(r['neither'], False, 0)}"
+        + ("  (장중 기준)" if r.get("basis") == "intraday" else "")
     )
 
 
@@ -170,6 +173,8 @@ def render_text(fc: Forecast) -> str:
         f"(~{fc.dates[-1]:%Y-%m-%d})  |  시뮬레이션 {fc.n_paths:,}회 × {len(fc.scenarios)}개 시나리오"
     )
     out.append(f"모델: {model_text(fc)}")
+    for wmsg in fc.data_warnings:
+        out.append(f"⚠ 데이터 점검: {wmsg}")
     if fc.events:
         out.append("이벤트: " + ", ".join(f"{d:%Y-%m-%d} (하루 충격 ±{s:.1%})" for d, s in fc.events))
     out.append("")
@@ -199,7 +204,8 @@ def render_text(fc: Forecast) -> str:
         out.append(_indent(table(level_headers(fc), level_rows(fc))))
         if race_text(fc):
             out.append(f"  ▶ {race_text(fc)}")
-        out.append("  ※ '만기 유지' = 만기일에 목표가 이상(손절가는 이하)에 있을 확률. 도달 확률은 장중 고가·저가가 아닌 종가 기준")
+        out.append("  ※ 장중 = 종가와 종가 사이에 가격이 건드렸을 가능성(브라운 브리지)까지 반영 — 지정가·손절 주문 체결 기준에 가까움")
+        out.append("     종가 = 종가로만 판정 · 만기 유지 = 만기 종가가 목표가 이상(손절가는 이하)일 확률 · 체크포인트별 수치는 장중 기준")
         out.append("")
 
     # 2. 현재 상태 진단
@@ -381,6 +387,7 @@ def render_markdown(fc: Forecast, chart_name: str | None = None) -> str:
         f"- 기준일: **{st.last_date:%Y-%m-%d}** / 현재가: **{money(s0)}**\n"
         f"- 예측기간: {fc.horizon}거래일 (~{fc.dates[-1]:%Y-%m-%d}) / 시뮬레이션 {fc.n_paths:,}회 × {len(fc.scenarios)}개 시나리오\n"
         f"- 모델: {model_text(fc)}"
+        + "".join(f"\n- ⚠ 데이터 점검: {wmsg}" for wmsg in fc.data_warnings)
     )
     if fc.events:
         md.append("- 이벤트: " + ", ".join(f"{d:%Y-%m-%d} (하루 충격 ±{s:.1%})" for d, s in fc.events))

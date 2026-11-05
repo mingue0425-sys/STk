@@ -31,7 +31,7 @@ def test_level_analysis_race_and_probabilities():
     paths = np.array([[100, 105, 111, 112], [100, 96, 89, 91], [100, 101, 99, 100.0], [100, 111, 120, 89]])
     w = np.full(4, 0.25)
     cps = [("1", 1), ("3", 3)]
-    stats, race = level_analysis(paths, w, 100.0, [110.0], [90.0], cps)
+    stats, race = level_analysis(paths, w, 100.0, [110.0], [90.0], cps, intraday=False)
     target, stop = stats
     assert target.prob_touch == pytest.approx(0.5)      # 경로 0, 3
     assert target.prob_end_beyond == pytest.approx(0.25)  # 경로 0 만 만기에 110 이상
@@ -201,3 +201,38 @@ def test_cli_watch(tmp_path, monkeypatch, capsys):
     summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
     assert [s["symbol"] for s in summary] == ["AAA", "BBB"]
     assert "종목 비교" in capsys.readouterr().out
+
+
+def test_crossing_probs_formula():
+    from stk.forecast import crossing_probs
+
+    logp = np.log(np.array([[100.0, 102.0, 111.0]]))
+    var = np.array([[0.02**2]])
+    p = crossing_probs(logp, np.log(110.0), True, var)
+    a, b = np.log(110 / 100), np.log(110 / 102)
+    assert p[0, 0] == pytest.approx(np.exp(-2 * a * b / 0.02**2))
+    assert p[0, 1] == 1.0  # 종가가 이미 넘음
+
+
+def test_intraday_touch_at_least_close_basis():
+    rng = np.random.default_rng(1)
+    r = rng.normal(0, 0.02, (4000, 60))
+    paths = 100 * np.exp(np.column_stack([np.zeros(4000), np.cumsum(r, axis=1)]))
+    w = np.full(4000, 1 / 4000)
+    cps = [("e", 60)]
+    intr, race_i = level_analysis(paths, w, 100.0, [115.0], [88.0], cps, intraday=True)
+    close, race_c = level_analysis(paths, w, 100.0, [115.0], [88.0], cps, intraday=False)
+    for a, b in zip(intr, close):
+        assert a.prob_touch > b.prob_touch          # 장중 도달 가능성이 더해짐
+        assert a.prob_touch_close == pytest.approx(b.prob_touch)
+        assert a.prob_end_beyond == pytest.approx(b.prob_end_beyond)
+    for race in (race_i, race_c):
+        assert race["target_first"] + race["stop_first"] + race["neither"] == pytest.approx(1.0)
+    assert race_i["neither"] < race_c["neither"]
+
+
+def test_intraday_equals_close_for_smooth_paths():
+    paths = np.array([np.linspace(100, 120, 41)])  # 변동 없는 직선 경로 → 장중 보정이 거의 없음
+    stats, _ = level_analysis(paths, np.array([1.0]), 100.0, [110.0], [], [("e", 40)], intraday=True)
+    assert stats[0].prob_touch == pytest.approx(1.0)
+    assert stats[0].median_days == pytest.approx(20, abs=1)

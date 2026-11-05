@@ -27,6 +27,7 @@ from pandas.tseries.holiday import (
 from pandas.tseries.offsets import CustomBusinessDay
 
 from .analysis import TRADING_DAYS, MarketStats, _price_series, analyze, estimate_event_std, log_returns
+from .data import check_prices
 from .market import MarketContext
 from .regime import HMMParams, RegimeState, build_regime_state, simulate_regime_paths
 from .scenarios import (
@@ -151,10 +152,12 @@ class LevelStat:
     kind: str                  # "target" | "stop"
     level: float
     rel: float                 # 현재가 대비
-    prob_touch: float          # 기간 중 한 번이라도 도달할 확률
-    prob_end_beyond: float     # 만기에 그 가격을 넘어서(목표가) / 밑돌아(손절가) 있을 확률
-    median_days: float | None  # 도달한 경로 기준 도달까지 걸린 거래일 중앙값
-    prob_by: dict[str, float] = field(default_factory=dict)  # 체크포인트별 누적 도달 확률
+    prob_touch: float          # 기간 중 한 번이라도 도달할 확률 (basis 기준)
+    prob_end_beyond: float     # 만기 종가가 그 가격을 넘어서(목표가) / 밑돌아(손절가) 있을 확률
+    median_days: float | None  # 도달한다면 걸리는 거래일 중앙값 (basis 기준)
+    prob_by: dict[str, float] = field(default_factory=dict)  # 체크포인트별 누적 도달 확률 (basis 기준)
+    prob_touch_close: float | None = None  # 종가 기준 도달 확률 (비교용)
+    basis: str = "intraday"    # "intraday": 장중(브라운 브리지 보정) / "close": 종가만
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -217,6 +220,7 @@ class Forecast:
     mix_samples: tuple[np.ndarray, np.ndarray] | None = field(default=None, repr=False)  # (만기가격, 가중치)
     levels: list[LevelStat] = field(default_factory=list)
     cp_quantiles: dict[int, list[float]] = field(default_factory=dict)  # 체크포인트별 5~95% 분위 가격
+    data_warnings: list[str] = field(default_factory=list)  # 데이터 품질 경고
     race: dict | None = None             # 목표가·손절가 중 먼저 도달할 확률
     risk: RiskStats | None = None
 
@@ -285,6 +289,7 @@ class Forecast:
                 "prob_hit_up_20": self.mix_prob_hit_up,
                 "prob_hit_down_20": self.mix_prob_hit_down,
             },
+            "data_warnings": self.data_warnings,
             "risk": self.risk.to_dict() if self.risk is not None else None,
             "levels": [lv.to_dict() for lv in self.levels],
             "race": self.race,
@@ -359,6 +364,7 @@ def run_forecast(
     events: list | None = None,
     targets: list | None = None,
     stops: list | None = None,
+    today: pd.Timestamp | None = None,
     keep_paths: bool = False,
 ) -> Forecast:
     """한 종목의 예측을 실행합니다.
@@ -374,6 +380,7 @@ def run_forecast(
         raise ValueError(f"model 은 {MODELS} 중 하나여야 합니다")
     spec = scenario_spec_with_fields(spec or load_spec(None))
     stats = analyze(prices, symbol=symbol, benchmark=benchmark)
+    data_warnings = check_prices(prices, today=today)
     calib = calibrate(
         stats, risk_free=risk_free, erp=erp, trend_weight=trend_weight, vol_halflife=vol_halflife,
         market=market, horizon=horizon,
@@ -485,6 +492,7 @@ def run_forecast(
         race=race,
         risk=risk,
         cp_quantiles=cp_quantiles,
+        data_warnings=data_warnings,
     )
 
 
@@ -526,12 +534,69 @@ def risk_stats(paths: np.ndarray, w: np.ndarray, s0: float) -> RiskStats:
 
 
 def _first_touch(paths: np.ndarray, level: float, upward: bool) -> np.ndarray:
-    """경로별 처음 도달한 일자(1부터). 도달하지 않으면 inf."""
+    """경로별 처음 종가가 도달한 일자(1부터). 도달하지 않으면 inf."""
     hit = paths[:, 1:] >= level if upward else paths[:, 1:] <= level
     any_hit = hit.any(axis=1)
     first = hit.argmax(axis=1).astype(float) + 1
     first[~any_hit] = np.inf
     return first
+
+
+def crossing_probs(logp: np.ndarray, log_level: float, upward: bool, var: np.ndarray) -> np.ndarray:
+    """하루 단위 구간마다 가격이 수준을 건드렸을 확률 (브라운 브리지).
+
+    두 종가가 모두 수준 안쪽이면 P(장중 도달) = exp(−2·a·b / σ²), a·b 는 양 끝 종가와 수준 사이의 로그 거리.
+    종가가 이미 넘었으면 1.
+    """
+    if upward:
+        a, b = log_level - logp[:, :-1], log_level - logp[:, 1:]
+    else:
+        a, b = logp[:, :-1] - log_level, logp[:, 1:] - log_level
+    with np.errstate(over="ignore", under="ignore"):
+        p = np.exp(-2.0 * np.clip(a, 0, None) * np.clip(b, 0, None) / var)
+    p[(a <= 0) | (b <= 0)] = 1.0
+    return p
+
+
+def _touch_curves(paths: np.ndarray, level: float, upward: bool, intraday: bool, chunk: int = 4000) -> np.ndarray:
+    """경로별 '해당 일자까지 도달했을 확률' 누적 곡선 (n, horizon). 종가 기준이면 0/1."""
+    n, t1 = paths.shape
+    out = np.empty((n, t1 - 1))
+    log_level = math.log(level)
+    for st in range(0, n, chunk):
+        blk = paths[st:st + chunk]
+        if intraday:
+            logp = np.log(blk)
+            var = np.maximum(np.var(np.diff(logp, axis=1), axis=1, keepdims=True), 1e-10)
+            p = crossing_probs(logp, log_level, upward, var)
+            out[st:st + chunk] = 1.0 - np.exp(np.cumsum(np.log1p(-np.minimum(p, 1 - 1e-12)), axis=1))
+            out[st:st + chunk][np.cumsum(p >= 1.0, axis=1) > 0] = 1.0
+        else:
+            hit = blk[:, 1:] >= level if upward else blk[:, 1:] <= level
+            out[st:st + chunk] = np.maximum.accumulate(hit, axis=1).astype(float)
+    return out
+
+
+def _race(paths: np.ndarray, w: np.ndarray, target: float, stop: float, intraday: bool, chunk: int = 4000) -> dict:
+    """목표가·손절가 중 어느 쪽에 먼저 닿는지 (같은 날 둘 다 닿을 가능성은 반반으로 나눔)."""
+    tf = sf = nei = 0.0
+    for st in range(0, len(paths), chunk):
+        blk, wb = paths[st:st + chunk], w[st:st + chunk]
+        logp = np.log(blk)
+        if intraday:
+            var = np.maximum(np.var(np.diff(logp, axis=1), axis=1, keepdims=True), 1e-10)
+            pu = crossing_probs(logp, math.log(target), True, var)
+            pd_ = crossing_probs(logp, math.log(stop), False, var)
+        else:
+            pu = (blk[:, 1:] >= target).astype(float)
+            pd_ = (blk[:, 1:] <= stop).astype(float)
+        surv_step = (1 - pu) * (1 - pd_)
+        surv_before = np.concatenate([np.ones((len(blk), 1)), np.cumprod(surv_step, axis=1)[:, :-1]], axis=1)
+        tf += float(wb @ (surv_before * (pu * (1 - pd_) + 0.5 * pu * pd_)).sum(axis=1))
+        sf += float(wb @ (surv_before * (pd_ * (1 - pu) + 0.5 * pu * pd_)).sum(axis=1))
+        nei += float(wb @ np.prod(surv_step, axis=1))
+    return {"target": target, "stop": stop, "target_first": tf, "stop_first": sf, "neither": nei,
+            "basis": "intraday" if intraday else "close"}
 
 
 def level_analysis(
@@ -541,34 +606,31 @@ def level_analysis(
     targets: list[float],
     stops: list[float],
     checkpoints: list[tuple[str, int]],
+    intraday: bool = True,
 ) -> tuple[list[LevelStat], dict | None]:
+    """목표가·손절가 도달 분석. intraday=True 면 종가 사이 장중 도달 가능성(브라운 브리지)까지 반영."""
     stats: list[LevelStat] = []
-    firsts: dict[str, np.ndarray] = {}
     for kind, levels in (("target", targets), ("stop", stops)):
         for lv in levels:
             upward = lv >= s0  # 현재가보다 위면 상향 돌파, 아래면 하향 이탈로 판정
-            first = _first_touch(paths, lv, upward)
-            touched = np.isfinite(first)
-            p_touch = float(w @ touched)
-            med = _wquantile(first[touched], w[touched], 0.5) if touched.any() else None
+            curve = _touch_curves(paths, lv, upward, intraday)          # (n, horizon) 누적 도달 확률
+            touch_by_day = w @ curve                                     # 일자별 누적 (전체)
+            p_touch = float(touch_by_day[-1])
+            med = None
+            if p_touch > 1e-9:
+                med = float(np.searchsorted(touch_by_day, 0.5 * p_touch) + 1)
+            close_first = _first_touch(paths, lv, upward)
             end = paths[:, -1] >= lv if upward else paths[:, -1] <= lv
             stats.append(
                 LevelStat(
                     kind=kind, level=lv, rel=lv / s0 - 1, prob_touch=p_touch, prob_end_beyond=float(w @ end),
-                    median_days=med, prob_by={lbl: float(w @ (first <= d)) for lbl, d in checkpoints},
+                    median_days=med, prob_by={lbl: float(touch_by_day[d - 1]) for lbl, d in checkpoints},
+                    prob_touch_close=float(w @ np.isfinite(close_first)), basis="intraday" if intraday else "close",
                 )
             )
-            firsts.setdefault(kind, first)  # 경쟁 분석은 첫 번째 목표가·손절가로
     race = None
-    if "target" in firsts and "stop" in firsts:
-        t, st = firsts["target"], firsts["stop"]
-        race = {
-            "target": stats[0].level,
-            "stop": next(x.level for x in stats if x.kind == "stop"),
-            "target_first": float(w @ (t < st)),
-            "stop_first": float(w @ (st < t)),
-            "neither": float(w @ (~np.isfinite(t) & ~np.isfinite(st))),
-        }
+    if targets and stops:
+        race = _race(paths, w, targets[0], stops[0], intraday)
     return stats, race
 
 

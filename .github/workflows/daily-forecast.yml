@@ -1,0 +1,119 @@
+name: Daily forecast
+
+# 평일 미국 장 마감 후 관심종목(watchlist.txt)을 예측해 forecast-reports 브랜치에 대시보드와 기록을 올립니다.
+# - 코드 브랜치에는 아무것도 커밋하지 않습니다 (결과는 forecast-reports 브랜치에만).
+# - forecast-reports/data/forecasts.jsonl 에 예측이 쌓이고, 날짜가 지난 예측은 자동으로 실제 주가와 비교됩니다.
+# - GitHub Pages 를 forecast-reports 브랜치(/)로 켜면 대시보드를 웹 페이지로 볼 수 있습니다 (README 참고).
+
+on:
+  schedule:
+    - cron: "17 22 * * 1-5"   # 평일 22:17 UTC = 미국 동부 17:17(겨울)/18:17(여름), 한국 시간 다음날 07:17
+  workflow_dispatch:
+    inputs:
+      horizon:
+        description: "예측 기간 (예: 1m, 3m, 6m, 1y)"
+        required: false
+        default: "6m"
+      tickers:
+        description: "종목 (공백/쉼표 구분). 비우면 watchlist.txt 사용"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-forecast
+  cancel-in-progress: false
+
+env:
+  REPORTS_BRANCH: forecast-reports
+  HORIZON: ${{ inputs.horizon || '6m' }}
+  TICKERS: ${{ inputs.tickers || '' }}
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Validate inputs
+        run: |
+          if ! [[ "$HORIZON" =~ ^[0-9]+(\.[0-9]+)?[dwmy]?$ ]]; then
+            echo "::error::예측 기간 형식 오류: '$HORIZON' (예: 3m, 6m, 1y)"; exit 1
+          fi
+          if ! [[ "$TICKERS" =~ ^[A-Za-z0-9.,^\ -]*$ ]]; then
+            echo "::error::종목 입력에 허용되지 않는 문자가 있습니다: '$TICKERS'"; exit 1
+          fi
+
+      - name: Prepare reports branch
+        run: |
+          if git ls-remote --exit-code --heads origin "$REPORTS_BRANCH" > /dev/null; then
+            git fetch --depth=1 origin "$REPORTS_BRANCH:refs/remotes/origin/$REPORTS_BRANCH"
+            git worktree add -B "$REPORTS_BRANCH" site "origin/$REPORTS_BRANCH"
+          else
+            echo "forecast-reports 브랜치를 새로 만듭니다"
+            git worktree add --detach site
+            git -C site checkout --orphan "$REPORTS_BRANCH"
+            git -C site rm -rf --quiet .
+          fi
+          mkdir -p site/data site/history
+
+      - name: Forecast watchlist
+        run: |
+          if [ -n "$TICKERS" ]; then
+            SRC="${TICKERS//,/ }"
+          else
+            SRC="--file watchlist.txt"
+          fi
+          rm -rf site/latest
+          # shellcheck disable=SC2086  # 종목 목록은 공백으로 나눠 전달
+          python -m stk watch $SRC -H "$HORIZON" -o site/latest \
+            --log site/data/forecasts.jsonl --summary-md "$GITHUB_STEP_SUMMARY"
+
+      - name: Track record
+        run: python -m stk track --log site/data/forecasts.jsonl | tee site/latest/track.txt
+
+      - name: Build site index
+        run: |
+          DAY=$(date -u +%F)
+          cp site/latest/summary.md "site/history/$DAY.md"
+          sed -E 's#\]\(([A-Za-z0-9._-]+\.html)\)#](latest/\1)#g' site/latest/summary.md > site/README.md
+          {
+            echo ""
+            echo "---"
+            echo "대시보드: [latest/index.html](latest/index.html) · 지난 요약: [history/](history/) · 예측 기록: [data/forecasts.jsonl](data/forecasts.jsonl)"
+          } >> site/README.md
+          printf '%s\n' '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=latest/index.html">' \
+            '<title>관심종목 흐름 예측</title><a href="latest/index.html">최신 대시보드로 이동</a>' > site/index.html
+          touch site/.nojekyll
+
+      - name: Upload dashboard artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forecast-dashboard-${{ github.run_number }}
+          path: site/latest
+          retention-days: 14
+
+      - name: Publish to reports branch
+        run: |
+          cd site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+            exit 0
+          fi
+          git commit -q -m "Forecast $(date -u +%F) (${HORIZON})"
+          git push origin "HEAD:$REPORTS_BRANCH"

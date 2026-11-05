@@ -48,6 +48,9 @@ def forecast_record(fc: Forecast) -> dict:
         "expected_return": fc.mix_expected_price / fc.s0 - 1,
         "outlook": fc.outlook.label,
         "direction": fc.outlook.direction,
+        "regime": (fc.regime.state.names[fc.regime.state.current_regime] if fc.regime is not None else None),
+        "regime_prob": (float(fc.regime.state.current.max()) if fc.regime is not None else None),
+        "var95": fc.risk.var95 if fc.risk is not None else None,
         "quantile_levels": list(LOG_QUANTILES),
         "checkpoints": [
             {"label": lbl, "day": d, "date": fc.dates[d].strftime("%Y-%m-%d"), "q": fc.cp_quantiles.get(d, [])}

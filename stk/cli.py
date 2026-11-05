@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from . import __version__
 from .data import (
     DEFAULT_CACHE_DIR,
@@ -49,8 +51,6 @@ def parse_event(text: str) -> tuple[str, float | None]:
     """'2027-01-29' 또는 '2027-01-29:0.08' / '2027-01-29:8%' → (날짜, 충격 표준편차)."""
     date, _, size = str(text).partition(":")
     try:
-        import pandas as pd
-
         pd.Timestamp(date)
     except (ValueError, TypeError) as err:
         raise argparse.ArgumentTypeError(f"이벤트 날짜 형식 오류: {text!r} (예: 2027-01-29 또는 2027-01-29:8%)") from err
@@ -171,6 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("-n", "--sims", type=int, default=5000, help="시나리오당 경로 수, 기본 5000")
     w.add_argument("-o", "--out", default="output/watch", help="대시보드 저장 폴더, 기본 ./output/watch")
     w.add_argument("--jobs", type=int, default=None, help="병렬 작업 수 (기본: CPU 코어 수)")
+    w.add_argument("--summary-md", metavar="FILE", help="마크다운 요약을 이 파일에 덧붙임 (예: $GITHUB_STEP_SUMMARY)")
     _add_common(w)
     _add_log(w)
 
@@ -342,6 +343,7 @@ def _forecast_kwargs(args, ctx: dict, market) -> dict:
         market=market,
         model=args.model,
         regime_weight=args.regime_weight,
+        today=pd.Timestamp.today().normalize(),
     )
 
 
@@ -371,7 +373,15 @@ def _brief(fc) -> dict:
 def _cmd_watch(args) -> int:
     from .market import market_context
     from .report import render_comparison
-    from .watch import read_watchlist, render_dashboard, run_watchlist, summary_json
+    from .tracking import evaluate, load_log
+    from .watch import (
+        compute_changes,
+        read_watchlist,
+        render_dashboard,
+        render_markdown_summary,
+        run_watchlist,
+        summary_json,
+    )
 
     symbols = [normalize_symbol(t) for t in args.tickers]
     if args.file:
@@ -405,15 +415,31 @@ def _cmd_watch(args) -> int:
     for it in items:
         if it.error:
             print(_error_text(it.symbol, ValueError(it.error)), file=sys.stderr)
-    for it in ok:
-        _log_forecast(args, it.forecast)
     if not ok:
         return 1
+    previous = load_log(args.log)                 # 이번 예측을 기록하기 전의 기록 → 직전 대비 변화
+    changes = compute_changes(items, previous)
+    for it in ok:
+        _log_forecast(args, it.forecast)
+    track = None
+    if not args.no_log:
+        def loader(sym):
+            return get_history(sym, years=args.years, cache_dir=ctx["cache_dir"], max_age_hours=12)
+        track = evaluate(load_log(args.log), loader)
+
     out = Path(args.out)
-    (out / "index.html").write_text(render_dashboard(items, args.horizon), encoding="utf-8")
+    (out / "index.html").write_text(render_dashboard(items, args.horizon, changes=changes, track=track), encoding="utf-8")
+    md = render_markdown_summary(items, args.horizon, changes=changes, track=track)
+    (out / "summary.md").write_text(md, encoding="utf-8")
     (out / "summary.json").write_text(summary_json(items), encoding="utf-8")
+    if args.summary_md:  # 예: GitHub Actions 의 $GITHUB_STEP_SUMMARY
+        with open(args.summary_md, "a", encoding="utf-8") as fh:
+            fh.write(md + "\n")
     print(render_comparison([it.forecast for it in ok]))
-    print(f"\n대시보드: {out / 'index.html'}  (종목별 리포트 {len(ok)}개, summary.json)")
+    flips = [s for s, c in changes.items() if c.outlook_changed]
+    if flips:
+        print(f"\n직전 예측 대비 흐름 판정이 바뀐 종목: {', '.join(flips)}")
+    print(f"\n대시보드: {out / 'index.html'}  (종목별 리포트 {len(ok)}개, summary.md, summary.json)")
     return 0
 
 
@@ -427,7 +453,7 @@ def _cmd_track(args) -> int:
         return 0
 
     def loader(sym):
-        return get_history(sym, years=3, cache_dir=DEFAULT_CACHE_DIR, refresh=args.refresh, max_age_hours=6)
+        return get_history(sym, years=10, cache_dir=DEFAULT_CACHE_DIR, refresh=args.refresh, max_age_hours=6)
 
     result = evaluate(records, loader)
     print(render_track(result, path))
@@ -447,8 +473,6 @@ def _cmd_backtest(args) -> int:
         prices = _load_prices(args, ticker, ctx["cache_dir"])
         rf_series = ctx["rf_series"]
         if ctx["rf_fixed"] is not None:
-            import pandas as pd
-
             rf_series = pd.Series([ctx["rf_fixed"]], index=[prices.index[0]])
         common = dict(
             horizon=args.horizon,

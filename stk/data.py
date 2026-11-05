@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import random
 import time
 from pathlib import Path
 
@@ -21,6 +22,17 @@ DEFAULT_RISK_FREE = 0.04
 RISK_FREE_SYMBOL = "^IRX"  # 13주 미국 국채(T-bill) 수익률, 단위: %
 
 PRICE_COLUMNS = ["open", "high", "low", "close", "adj_close", "volume"]
+RETRY_STATUS = {429, 500, 502, 503, 504}  # 잠시 후 다시 시도할 상태 코드 (429 = 요청 과다)
+
+
+def _backoff(attempt: int, retry_after: str | None = None) -> float:
+    """서버가 Retry-After 를 주면 따르고, 아니면 지수 백오프 + 지터."""
+    if retry_after:
+        try:
+            return min(max(float(retry_after), 1.0), 60.0)
+        except ValueError:
+            pass
+    return min(2.0**attempt, 30.0) * (0.5 + random.random())
 
 
 class DataError(RuntimeError):
@@ -37,7 +49,7 @@ def fetch_yahoo(
     years: float = 10,
     session: requests.Session | None = None,
     timeout: float = 20.0,
-    retries: int = 3,
+    retries: int = 4,
 ) -> pd.DataFrame:
     """Yahoo Finance에서 일봉 데이터를 받아 DataFrame으로 반환합니다."""
     symbol = normalize_symbol(symbol)
@@ -52,20 +64,27 @@ def fetch_yahoo(
     http = session or requests.Session()
     url = YAHOO_CHART_URL.format(symbol=requests.utils.quote(symbol, safe=""))
 
-    last_err: Exception | None = None
+    last_err: str = ""
     for attempt in range(retries):
+        retry_after = None
         try:
             resp = http.get(url, params=params, headers=HTTP_HEADERS, timeout=timeout)
             if resp.status_code == 404:
                 raise DataError(f"{symbol}: 종목을 찾을 수 없습니다 (HTTP 404)")
-            resp.raise_for_status()
-            return parse_yahoo_chart(resp.json(), symbol)
+            if resp.status_code in RETRY_STATUS:
+                last_err = f"HTTP {resp.status_code}"
+                retry_after = resp.headers.get("Retry-After")
+            elif resp.status_code >= 400:
+                raise DataError(f"{symbol}: 요청 실패 (HTTP {resp.status_code})")
+            else:
+                return parse_yahoo_chart(resp.json(), symbol)
         except DataError:
             raise
         except (requests.RequestException, ValueError) as err:
-            last_err = err
-            time.sleep(1.5 * (attempt + 1))
-    raise DataError(f"{symbol}: 데이터 다운로드 실패 ({last_err})")
+            last_err = str(err)
+        if attempt < retries - 1:
+            time.sleep(_backoff(attempt, retry_after))
+    raise DataError(f"{symbol}: 데이터 다운로드 실패 ({last_err}, {retries}회 시도)")
 
 
 def parse_yahoo_chart(payload: dict, symbol: str = "") -> pd.DataFrame:
@@ -137,6 +156,34 @@ def load_csv(path: str | Path) -> pd.DataFrame:
     if frame.empty:
         raise DataError(f"{path}: 유효한 가격 행이 없습니다")
     return frame
+
+
+def check_prices(frame: pd.DataFrame | pd.Series, today: pd.Timestamp | None = None) -> list[str]:
+    """가격 데이터 품질 점검 → 경고 문구 목록 (문제가 없으면 빈 목록)."""
+    s = frame["adj_close"] if isinstance(frame, pd.DataFrame) and "adj_close" in frame else frame
+    if isinstance(s, pd.DataFrame):
+        s = s["close"]
+    s = s.astype(float).dropna()
+    warnings: list[str] = []
+    if s.empty:
+        return ["가격 데이터가 비어 있습니다"]
+    if len(s) < 252:
+        warnings.append(f"데이터가 {len(s)}거래일로 짧아 200일선·1년 추세·국면 모델의 신뢰도가 낮습니다")
+    r = np.log(s / s.shift(1)).dropna()
+    big = r[r.abs() > 0.35]
+    if len(big):
+        d, v = big.index[-1], float(big.iloc[-1])
+        warnings.append(f"하루 ±35% 이상 변동 {len(big)}회 (최근 {d:%Y-%m-%d} {np.expm1(v):+.0%}) — 실제 사건인지 데이터 오류인지 확인하세요")
+    if len(s) > 1:
+        gaps = np.busday_count(s.index[:-1].values.astype("datetime64[D]"), s.index[1:].values.astype("datetime64[D]"))
+        if len(gaps) and gaps.max() > 7:
+            i = int(gaps.argmax())
+            warnings.append(f"데이터 공백 {int(gaps[i])}영업일 ({s.index[i]:%Y-%m-%d} ~ {s.index[i + 1]:%Y-%m-%d}) — 거래정지 또는 누락")
+    if today is not None:
+        lag = int(np.busday_count(s.index[-1].date(), pd.Timestamp(today).date()))
+        if lag > 5:
+            warnings.append(f"마지막 데이터가 {s.index[-1]:%Y-%m-%d} 로 {lag}영업일 전입니다 — 상장폐지·거래정지 여부를 확인하세요")
+    return warnings
 
 
 def get_history(

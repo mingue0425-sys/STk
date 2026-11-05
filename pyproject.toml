@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stk"
-version = "0.3.0"
+version = "0.4.0"
 description = "미국 개별주 시나리오별 주가 흐름 예측 (몬테카를로 시뮬레이션)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "pyyaml>=6"]
 
 [project.scripts]
 stk = "stk.cli:main"

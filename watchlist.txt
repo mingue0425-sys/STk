@@ -1,4 +1,4 @@
-# 관심종목 예시 — python -m stk watch --file watchlist.example.txt
+# 관심종목 예시 — python -m stk watch --file watchlist.txt
 # 한 줄에 하나 또는 쉼표로 구분, # 뒤는 주석
 
 AAPL, MSFT, NVDA, GOOGL, AMZN, META   # 빅테크

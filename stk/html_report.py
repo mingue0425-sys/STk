@@ -226,7 +226,8 @@ def render_html(fc: Forecast, prices) -> str:
             levels = "<h3>목표가 / 손절가</h3>" + _table(level_headers(fc), level_rows(fc), num_from=1)
             if race_text(fc):
                 levels += f'<p class="lead"><strong>{_e(race_text(fc))}</strong></p>'
-            levels += '<p class="note">만기 유지 = 만기일에 목표가 이상(손절가는 이하)에 있을 확률 · 종가 기준</p>'
+            levels += ('<p class="note">장중 = 종가 사이 가격 경로(브라운 브리지)까지 반영한 도달 확률 · 종가 = 종가로만 판정 · '
+                       '만기 유지 = 만기 종가가 목표가 이상(손절가는 이하)일 확률</p>')
         risk_block = f"""
 <section class="card">
   <h2>위험 지표{' · 목표가 / 손절가' if fc.levels else ''}</h2>
@@ -261,6 +262,7 @@ def render_html(fc: Forecast, prices) -> str:
   </div>
 </header>
 
+{"".join(f'<p class="warn" role="note">⚠ 데이터 점검: {_e(wm)}</p>' for wm in fc.data_warnings)}
 <section class="card hero">
   <div class="verdict">
     <div class="verdict-label">전체 흐름</div>
@@ -413,6 +415,7 @@ tbody tr:last-child td{border-bottom:0}
 .lead{margin:0 0 6px;color:var(--text)}
 ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0;color:var(--text)}
 .foot{font-size:12px;color:var(--muted);margin-top:8px}
+.warn{margin:0 0 12px;padding:8px 12px;border:1px solid var(--axis);border-left:4px solid var(--s3);border-radius:8px;font-size:13px;background:var(--surface)}
 @media (max-width:860px){.hero{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 @media (max-width:420px){.kpis{grid-template-columns:1fr}.prob-row{grid-template-columns:88px 1fr 40px}h1{font-size:22px}}
 """
