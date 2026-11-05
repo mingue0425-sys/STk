@@ -54,6 +54,10 @@ LABELS = {
         "ret": "만기 수익률",
         "density": "상대 빈도",
         "total": "전체",
+        "regime": "국면 모델",
+        "weight": "비중",
+        "ref": "참고",
+        "event": "이벤트",
         "today": "기준일",
         "subtitle": "기준일 {date} · 현재가 ${price:,.2f} · {h}거래일 예측 · 상승확률 {pu:.0%} · 기대수익률 {er:+.1%}",
     },
@@ -67,6 +71,10 @@ LABELS = {
         "ret": "Return at horizon",
         "density": "Relative frequency",
         "total": "Overall",
+        "regime": "Regime model",
+        "weight": "weight",
+        "ref": "ref.",
+        "event": "Event",
         "today": "As of",
         "subtitle": "As of {date} · Last ${price:,.2f} · {h}-day horizon · P(up) {pu:.0%} · E[return] {er:+.1%}",
     },
@@ -120,9 +128,12 @@ def plot_forecast(
     lang: str | None = None,
     dpi: int = 150,
 ) -> Path:
+    import logging
+
     import matplotlib
 
     matplotlib.use("Agg")
+    logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
     from matplotlib import transforms
@@ -167,9 +178,19 @@ def plot_forecast(
         color = SERIES_COLORS[res.scenario.color_slot % len(SERIES_COLORS)]
         med = res.quantiles[0.5]
         ax.plot(dates, med, color=color, linewidth=2.0, label=f"{sc_name(res.scenario)} ({res.scenario.probability:.0%})")
-        end_points.append((float(med[-1]), color, res))
+        end_points.append((float(med[-1]), color, sc_name(res.scenario)))
+    regime_color = SERIES_COLORS[len(fc.results) % len(SERIES_COLORS)]
+    if fc.regime is not None:
+        med = fc.regime.quantiles[0.5]
+        wtxt = f"{L['weight']} {fc.regime_weight:.0%}" if fc.regime_weight > 0 else L["ref"]
+        ax.plot(dates, med, color=regime_color, linewidth=2.0, linestyle=(0, (1, 1.5)), label=f"{L['regime']} ({wtxt})")
+        end_points.append((float(med[-1]), regime_color, L["regime"]))
     ax.plot(dates, mq[0.5], color=TEXT_PRIMARY, linewidth=2.0, linestyle=(0, (4, 2)), label=L["median"])
     ax.axvline(dates[0], color=TEXT_SECONDARY, linewidth=0.8, linestyle=":")
+    for ev_date, _ in fc.events:
+        ax.axvline(ev_date, color=TEXT_SECONDARY, linewidth=0.8, linestyle=(0, (2, 2)))
+        ax.annotate(L["event"], xy=(ev_date, 1.0), xycoords=("data", "axes fraction"), xytext=(3, -10),
+                    textcoords="offset points", fontsize=7.5, color=TEXT_SECONDARY)
 
     # 오른쪽 여백에 직접 라벨 (x: 축 비율, y: 가격)
     x_start = hist.index[0] if len(hist) else dates[0]
@@ -177,11 +198,11 @@ def plot_forecast(
     ymin, ymax = ax.get_ylim()
     ys = _spread_labels([p for p, _, _ in end_points], (ymax - ymin) * 0.045)
     label_tf = transforms.blended_transform_factory(ax.transAxes, ax.transData)
-    for (y_true, color, res), y_lab in zip(end_points, ys):
+    for (y_true, color, name), y_lab in zip(end_points, ys):
         ax.plot([dates[-1]], [y_true], marker="o", markersize=5, color=color, markeredgecolor=SURFACE,
                 markeredgewidth=1.5, clip_on=False, zorder=5)
         ax.annotate(
-            f"{sc_name(res.scenario)}  ${y_true:,.0f} ({y_true / s0 - 1:+.0%})",
+            f"{name}  ${y_true:,.0f} ({y_true / s0 - 1:+.0%})",
             xy=(dates[-1], y_true),
             xytext=(1.025, y_lab),
             textcoords=label_tf,
@@ -218,17 +239,21 @@ def plot_forecast(
     )
 
     # ---- 하단: 만기 수익률 분포
-    all_ret = np.concatenate([r.terminal / s0 - 1 for r in fc.results])
+    groups = [(r.terminal, r.scenario.probability * (1 - fc.regime_weight),
+               SERIES_COLORS[r.scenario.color_slot % len(SERIES_COLORS)], sc_name(r.scenario), "-")
+              for r in fc.results]
+    if fc.regime is not None and fc.regime_weight > 0:
+        groups.append((fc.regime.terminal, fc.regime_weight, regime_color, L["regime"], (0, (1, 1.5))))
+    all_ret = np.concatenate([g[0] / s0 - 1 for g in groups])
     lo, hi = np.quantile(all_ret, [0.005, 0.995])
     bins = np.linspace(lo, hi, 70)
     width = bins[1] - bins[0]
     total = np.zeros(len(bins) - 1)
-    for res in fc.results:
-        h, _ = np.histogram(res.terminal / s0 - 1, bins=bins)
-        h = h / len(res.terminal) * res.scenario.probability / width
+    for terminal, weight, color, name, style in groups:
+        h, _ = np.histogram(terminal / s0 - 1, bins=bins)
+        h = h / len(terminal) * weight / width
         total += h
-        color = SERIES_COLORS[res.scenario.color_slot % len(SERIES_COLORS)]
-        ax2.step(bins[:-1], h, where="post", color=color, linewidth=1.6, label=sc_name(res.scenario))
+        ax2.step(bins[:-1], h, where="post", color=color, linewidth=1.6, linestyle=style, label=name)
     ax2.fill_between(bins[:-1], total, step="post", color=BAND, alpha=0.22, linewidth=0, label=L["total"])
     ax2.axvline(0, color=TEXT_SECONDARY, linewidth=0.8, linestyle=":")
     ax2.xaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))

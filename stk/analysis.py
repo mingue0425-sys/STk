@@ -158,6 +158,23 @@ def estimate_tail_df(returns: pd.Series) -> float:
     return float(np.clip(4.0 + 6.0 / k, 3.0, 30.0))
 
 
+def estimate_event_std(prices: pd.DataFrame | pd.Series, quarters: int = 12) -> float:
+    """실적 발표일 같은 이벤트 하루 충격의 표준편차(로그) 근사.
+
+    분기(63거래일)마다 가장 큰 일간 변동은 대개 실적 발표일이라는 점을 이용해,
+    최근 N분기 최대 변동의 제곱평균에서 평상시 일간 분산을 뺀 값을 씁니다.
+    """
+    r = log_returns(_price_series(prices)).to_numpy()
+    q = 63
+    n = min(quarters, len(r) // q)
+    if n < 2:
+        return float(np.std(r) * 3) if len(r) else 0.05
+    blocks = r[-n * q:].reshape(n, q)
+    peak2 = float(np.mean(np.max(np.abs(blocks), axis=1) ** 2))
+    daily_var = float(np.median(blocks.var(axis=1)))
+    return float(np.sqrt(max(peak2 - daily_var, daily_var)))
+
+
 def _tanh(x: float) -> float:
     return float(np.tanh(x)) if np.isfinite(x) else float("nan")
 

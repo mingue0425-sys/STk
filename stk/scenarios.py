@@ -18,14 +18,19 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .analysis import MarketStats
+from .market import MarketContext, forward_vol
 
 DEFAULT_ERP = 0.05            # 주식 위험 프리미엄 (연)
-DEFAULT_TREND_WEIGHT = 0.20   # 기본 기대수익률에서 최근 추세가 차지하는 비중
+TREND_WEIGHT_ON = 0.20        # 추세 신호를 켰을 때(--trend) 기본 기대수익률에서 최근 추세 비중
+DEFAULT_TREND_WEIGHT = 0.0    # 기본값: 추세 미반영 (백테스트 결과 — README 참고)
 DEFAULT_VOL_HALFLIFE = 42     # 현재 변동성이 장기 변동성으로 회귀하는 반감기 (거래일)
 DEFAULT_TILT_STRENGTH = 0.7   # 추세 점수가 시나리오 확률을 기울이는 강도
+DEFAULT_STRESS_STRENGTH = 0.6  # 시장 스트레스 점수가 시나리오 확률을 기울이는 강도
+DEFAULT_FWD_VOL_WEIGHT = 0.5  # 현재 변동성 추정에서 VIX 기반 선행 변동성 비중
 
 DEFAULT_SPEC: dict = {
     "tilt_strength": DEFAULT_TILT_STRENGTH,
+    "stress_strength": DEFAULT_STRESS_STRENGTH,
     "fixed_probabilities": False,
     "scenarios": [
         {
@@ -34,14 +39,16 @@ DEFAULT_SPEC: dict = {
             "description": "실적·수급 호조로 상승 흐름이 이어지는 경우",
             "prior": 0.25,
             "tilt": 1.0,
+            "stress_tilt": -0.3,
             "phases": [{"frac": 1.0, "drift_spread": 1.0, "vol_mult": 0.9}],
         },
         {
             "key": "base",
             "name": "기본",
-            "description": "시장 기대수익률(CAPM)과 최근 추세를 반영한 평균적 흐름",
+            "description": "시장 기대수익률(CAPM) 기준의 평균적 흐름 (--trend 시 최근 추세 일부 반영)",
             "prior": 0.40,
             "tilt": 0.0,
+            "stress_tilt": 0.0,
             "phases": [{"frac": 1.0, "drift_spread": 0.0, "vol_mult": 1.0}],
         },
         {
@@ -50,6 +57,7 @@ DEFAULT_SPEC: dict = {
             "description": "실적 둔화·밸류에이션 부담으로 하락 흐름이 이어지는 경우",
             "prior": 0.20,
             "tilt": -1.0,
+            "stress_tilt": 0.3,
             "phases": [{"frac": 1.0, "drift_spread": -1.5, "vol_mult": 1.25}],
         },
         {
@@ -58,6 +66,7 @@ DEFAULT_SPEC: dict = {
             "description": "초반 1/3 구간 급한 조정 이후 회복하는 V자 흐름",
             "prior": 0.10,
             "tilt": 0.0,
+            "stress_tilt": 0.6,
             "phases": [
                 {"frac": 0.35, "drift_spread": -2.5, "vol_mult": 1.4},
                 {"frac": 0.65, "drift_spread": 1.2, "vol_mult": 1.0},
@@ -69,6 +78,7 @@ DEFAULT_SPEC: dict = {
             "description": "시장 위기·악재로 급락(점프)이 반복되는 스트레스 상황",
             "prior": 0.05,
             "tilt": -1.0,
+            "stress_tilt": 1.0,
             "phases": [
                 {
                     "frac": 1.0,
@@ -96,10 +106,13 @@ class Calibration:
     trend_weight: float
     base_drift: float       # 기본 시나리오 기대수익률
     spread: float           # 시나리오 간 기대수익률 간격
-    vol_now: float          # 현재(EWMA) 변동성
+    vol_now: float          # 현재 변동성 (EWMA, VIX 기반 선행 변동성과 혼합)
     vol_long: float         # 장기 평균 변동성 (회귀 목표)
     vol_halflife: float     # 변동성 회귀 반감기 (거래일)
     tail_df: float          # 수익률 꼬리 두께 (Student-t 자유도)
+    vol_ewma: float = float("nan")      # 과거 수익률 기반 EWMA 변동성
+    vol_fwd: float | None = None        # VIX 기반 선행 변동성
+    market_stress: float = 0.0          # 시장 스트레스 점수 (−1 ~ +1)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -125,6 +138,7 @@ class Scenario:
     phases: list[Phase]
     probability: float = 0.0
     color_slot: int = 0
+    stress_tilt: float = 0.0
 
     @property
     def avg_drift(self) -> float:
@@ -153,8 +167,14 @@ def calibrate(
     erp: float = DEFAULT_ERP,
     trend_weight: float = DEFAULT_TREND_WEIGHT,
     vol_halflife: float = DEFAULT_VOL_HALFLIFE,
+    market: MarketContext | None = None,
+    horizon: int = 126,
+    fwd_vol_weight: float = DEFAULT_FWD_VOL_WEIGHT,
 ) -> Calibration:
-    """기본 기대수익률 = (1-w)·CAPM + w·추세, 시나리오 폭 = 장기 변동성의 절반."""
+    """기본 기대수익률 = (1-w)·CAPM + w·추세, 시나리오 폭 = 장기 변동성의 절반.
+
+    시장 데이터(VIX)가 있으면 현재 변동성을 EWMA 와 VIX 기반 선행 변동성의 혼합으로 둡니다.
+    """
     beta = stats.beta if stats.beta is not None and math.isfinite(stats.beta) else 1.0
     beta_c = min(max(beta, 0.3), 3.0)
     capm = risk_free + beta_c * erp
@@ -167,7 +187,13 @@ def calibrate(
     w = min(max(trend_weight, 0.0), 1.0)
     base = (1.0 - w) * capm + w * trend
     spread = min(max(0.5 * vol_long, 0.06), 0.30)
-    vol_now = stats.vol_now if math.isfinite(stats.vol_now) else vol_long
+    vol_ewma = stats.vol_now if math.isfinite(stats.vol_now) else vol_long
+    vol_fwd = forward_vol(vol_1y, stats.beta, market, min(horizon, 63))
+    if vol_fwd is not None:
+        wf = min(max(fwd_vol_weight, 0.0), 1.0)
+        vol_now = math.sqrt((1 - wf) * vol_ewma**2 + wf * vol_fwd**2)
+    else:
+        vol_now = vol_ewma
 
     return Calibration(
         risk_free=risk_free,
@@ -182,6 +208,9 @@ def calibrate(
         vol_long=vol_long,
         vol_halflife=vol_halflife,
         tail_df=stats.tail_df,
+        vol_ewma=vol_ewma,
+        vol_fwd=vol_fwd,
+        market_stress=market.stress if market is not None else 0.0,
     )
 
 
@@ -230,6 +259,7 @@ def build_scenarios(spec: dict, calib: Calibration) -> list[Scenario]:
                 tilt=float(raw.get("tilt", 0.0)),
                 phases=phases,
                 color_slot=idx,
+                stress_tilt=float(raw.get("stress_tilt", 0.0)),
             )
         )
     return scenarios
@@ -264,11 +294,21 @@ def assign_probabilities(
     trend_score: float,
     tilt_strength: float = DEFAULT_TILT_STRENGTH,
     fixed: bool = False,
+    stress: float = 0.0,
+    stress_strength: float = DEFAULT_STRESS_STRENGTH,
 ) -> None:
-    """p_i ∝ prior_i × exp(tilt_i × 추세점수 × 강도). fixed=True 면 prior 를 정규화만 합니다."""
+    """p_i ∝ prior_i × exp(tilt_i·추세점수·강도 + stress_tilt_i·스트레스·강도).
+
+    fixed=True 면 prior 를 정규화만 합니다.
+    """
     weights = []
     for sc in scenarios:
-        w = sc.prior if fixed else sc.prior * math.exp(sc.tilt * trend_score * tilt_strength)
+        if fixed:
+            w = sc.prior
+        else:
+            w = sc.prior * math.exp(
+                sc.tilt * trend_score * tilt_strength + sc.stress_tilt * stress * stress_strength
+            )
         weights.append(w)
     total = sum(weights)
     if total <= 0:
@@ -285,6 +325,7 @@ def scenario_spec_with_fields(spec: dict) -> dict:
     """기본값을 채운 설정 사본 (tilt_strength 등)."""
     out = copy.deepcopy(spec)
     out.setdefault("tilt_strength", DEFAULT_TILT_STRENGTH)
+    out.setdefault("stress_strength", DEFAULT_STRESS_STRENGTH)
     out.setdefault("fixed_probabilities", False)
     return out
 

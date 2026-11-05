@@ -16,6 +16,7 @@ import pandas as pd
 from .analysis import TRADING_DAYS
 from .data import risk_free_at
 from .forecast import run_forecast
+from .market import market_context
 from .report import bar, pct, table
 
 
@@ -61,10 +62,14 @@ def walk_forward(
     n_paths: int = 2000,
     benchmark: pd.DataFrame | None = None,
     risk_free_series: pd.Series | None = None,
+    vix: pd.DataFrame | None = None,
+    vix3m: pd.DataFrame | None = None,
+    use_market: bool = True,
     min_history: int = 2 * TRADING_DAYS,
     progress: bool = False,
     **forecast_kwargs,
 ) -> BacktestResult:
+    """각 예측 시점에는 그 시점까지의 가격·시장 데이터만 사용합니다 (미래 정보 차단)."""
     p = prices["adj_close"].astype(float).dropna() if "adj_close" in prices else prices["close"].astype(float)
     prices = prices.loc[p.index]
     last_origin = len(p) - 1 - horizon
@@ -75,11 +80,15 @@ def walk_forward(
     if not origins:
         raise ValueError(f"{symbol}: 평가 구간에 해당하는 시점이 없습니다")
 
+    model = forecast_kwargs.get("model", "ensemble")
+    forecast_kwargs.setdefault("regime_info", model != "scenario")
+    regime_init = None
     rows = []
     for k, i in enumerate(origins):
         date = p.index[i]
         hist = prices.iloc[: i + 1]
         bench = benchmark.loc[:date] if benchmark is not None else None
+        mkt = market_context(bench, vix, vix3m, as_of=date) if use_market and bench is not None else None
         fc = run_forecast(
             hist,
             symbol,
@@ -88,16 +97,18 @@ def walk_forward(
             benchmark=bench,
             risk_free=risk_free_at(risk_free_series, date),
             seed=i,
+            market=mkt,
+            regime_init=regime_init,
             **forecast_kwargs,
         )
+        if fc.regime is not None:
+            regime_init = fc.regime.state.params  # 다음 시점 적합의 시작값 (빠른 수렴)
         s0 = fc.s0
         realized = float(p.iloc[i + horizon])
         y = math.log(realized / s0)
 
-        samples = np.concatenate([np.log(r.terminal / s0) for r in fc.results])
-        weights = np.concatenate(
-            [np.full(len(r.terminal), r.scenario.probability / len(r.terminal)) for r in fc.results]
-        )
+        terminal, weights = fc.mix_samples
+        samples = np.log(terminal / s0)
         pit = float(weights[samples <= y].sum())
         q = fc.mix_terminal_quantiles
         sigma_h = fc.stats.vol_long * math.sqrt(horizon / TRADING_DAYS)
@@ -195,3 +206,54 @@ def _pit_bias(mean_pit: float) -> str:
 
 def _indent(text: str, n: int = 2) -> str:
     return "\n".join(" " * n + line for line in text.splitlines())
+
+
+# ----------------------------------------------------------------- 설정 비교
+_TREND = dict(tilt=True, trend_weight=0.20)
+_NO_TREND = dict(tilt=False, trend_weight=0.0)
+COMPARE_CONFIGS = {
+    "앙상블": dict(model="ensemble", **_NO_TREND),
+    "앙상블 + 추세": dict(model="ensemble", **_TREND),
+    "시나리오": dict(model="scenario", **_NO_TREND),
+    "시나리오 + 추세": dict(model="scenario", **_TREND),
+    "국면(HMM)": dict(model="regime", **_NO_TREND),
+}
+
+
+def compare_configs(prices: pd.DataFrame, symbol: str, regime_weight: float = 0.5, **common) -> pd.DataFrame:
+    """여러 모델 설정을 같은 조건으로 백테스트해 요약표를 반환합니다."""
+    progress = common.pop("progress", False)
+    rows = []
+    for name, cfg in COMPARE_CONFIGS.items():
+        if progress:
+            print(f"  [{name}]", flush=True)
+        bt = walk_forward(prices, symbol, progress=progress, regime_weight=regime_weight, **cfg, **common)
+        rows.append({"설정": name, **bt.summary})
+    return pd.DataFrame(rows)
+
+
+def render_comparison_table(symbol: str, horizon: int, summary: pd.DataFrame) -> str:
+    best = summary["crps_skill"].idxmax()
+    rows = []
+    for i, r in summary.iterrows():
+        rows.append(
+            [
+                ("▶ " if i == best else "  ") + r["설정"],
+                pct(r["coverage50"], False),
+                pct(r["coverage90"], False),
+                pct(r["hit_rate"], False),
+                f"{r['brier']:.3f}",
+                pct(r["crps_skill"]),
+                f"{r['corr_expected_realized']:+.2f}",
+            ]
+        )
+    out = [
+        "═" * 78,
+        f"  {symbol} 모델 설정 비교 ({horizon}거래일 예측, {int(summary['n'].iloc[0])}회, {summary['period'].iloc[0]})",
+        "═" * 78,
+        _indent(table(["설정", "50% 적중", "90% 적중", "방향 적중", "Brier", "CRPS skill", "기대-실현 상관"], rows)),
+        "",
+        f"  ▶ CRPS skill 기준 최적: {summary.loc[best, '설정']}  "
+        "(차이가 1~2%p 이내면 통계적으로 의미 있는 차이로 보기 어렵습니다)",
+    ]
+    return "\n".join(out)

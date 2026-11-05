@@ -8,6 +8,7 @@
 - σ_t  : 현재 변동성에서 장기 변동성으로 지수적으로 회귀하는 경로 × 국면 변동성 배수
 - ε_t  : 분산 1로 정규화한 Student-t 난수 (두꺼운 꼬리)
 - J_t  : 복합 포아송 점프 (급등락). 기대수익률에 보정하지 않으므로 점프는 추가 충격입니다.
+- 이벤트일(실적 발표 등): 지정한 날짜에 평균 0(가격 기준)인 추가 충격 N(−½s², s²)
 """
 
 from __future__ import annotations
@@ -74,8 +75,12 @@ def simulate_paths(
     horizon: int,
     n_paths: int,
     rng: np.random.Generator,
+    event_days: dict[int, float] | None = None,
 ) -> np.ndarray:
-    """가격 경로 배열 (n_paths, horizon + 1)을 반환합니다. 0열은 현재가."""
+    """가격 경로 배열 (n_paths, horizon + 1)을 반환합니다. 0열은 현재가.
+
+    event_days: {경로상 일자 인덱스(0 = 첫 미래 거래일): 충격 표준편차(로그)}
+    """
     if horizon < 1:
         raise ValueError("horizon 은 1 거래일 이상이어야 합니다")
     prm = daily_parameters(scenario, calib, horizon)
@@ -99,6 +104,11 @@ def simulate_paths(
             log_ret[has] += n * prm["jump_mean"][np.nonzero(has)[1]] + np.sqrt(n) * prm["jump_std"][
                 np.nonzero(has)[1]
             ] * z
+
+    if event_days:
+        for day, std in event_days.items():
+            if 0 <= day < horizon and std > 0:
+                log_ret[:, day] += std * rng.standard_normal(n_paths) - 0.5 * std**2
 
     paths = np.empty((n_paths, horizon + 1))
     paths[:, 0] = s0
