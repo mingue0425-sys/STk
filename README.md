@@ -173,9 +173,9 @@ alerts.md              흐름 변화·불안 국면 진입·데이터 경고가 
 1. 관심종목은 저장소 루트의 `watchlist.txt` 를 수정해 커밋합니다. 기본 20종목: 빅테크(AAPL·MSFT·GOOGL·AMZN·META),
    반도체(NVDA·AVGO·AMD), 성장주(TSLA·NFLX), 금융·결제(V·JPM·BRK.B), 헬스케어(LLY·UNH·PFE), 소비재·유통(COST·WMT·KO), 에너지(XOM).
 2. 바로 돌려 보려면: GitHub → **Actions** → **Daily forecast** → **Run workflow** (예측 기간 목록·종목을 입력할 수 있음).
-3. **공개 사이트**: 매 실행 후 GitHub Pages 로 자동 배포됩니다 → **https://mingue0425-sys.github.io/STk/**
-   (워크플로의 `pages` 작업이 `forecast-reports` 브랜치 내용을 배포. 포크한 저장소에서는 `https://<사용자명>.github.io/<저장소>/`.
-   자동 활성화가 막혀 있으면 Settings → Pages → Source 를 **GitHub Actions** 로 바꾸세요.)
+3. **공개 사이트**: 매 실행 후 GitHub Pages 로 자동 갱신됩니다 → **https://mingue0425-sys.github.io/STk/**
+   (Settings → Pages → Source: **Deploy from a branch**, 브랜치 `forecast-reports` / `(root)`.
+   워크플로가 이 브랜치에 푸시하면 GitHub 가 알아서 다시 배포합니다. 포크한 저장소에서는 같은 설정 후 `https://<사용자명>.github.io/<저장소>/`.)
 4. **흐름 변화 알림 (선택)**: **Settings → Secrets and variables → Actions → Variables → New repository variable** 에서
    이름 `STK_ALERTS`, 값 `on` 을 추가하면, 흐름 판정이 바뀌거나(상승확률 2%p 이상 변화) 불안 국면에 들어간 종목이 있을 때
    '관심종목 흐름 변화 알림' 이슈에 댓글이 달립니다 (GitHub 알림으로 메일·앱 푸시 수신). 기본은 꺼져 있습니다.

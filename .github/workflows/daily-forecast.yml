@@ -4,7 +4,8 @@ name: Daily forecast
 # forecast-reports 브랜치에 사이트(첫 화면 + 기간별 대시보드)와 누적 기록을 올립니다.
 # - 코드 브랜치에는 아무것도 커밋하지 않습니다 (결과는 forecast-reports 브랜치에만).
 # - forecast-reports/data/forecasts.jsonl 에 예측이 쌓이고, 날짜가 지난 예측은 자동으로 실제 주가와 비교됩니다.
-# - GitHub Pages 를 forecast-reports 브랜치(/)로 켜면 웹 페이지로 볼 수 있습니다 (README 참고).
+# - 공개 사이트: GitHub Pages 가 forecast-reports 브랜치(/)를 배포하도록 설정돼 있어, 이 작업이 브랜치에
+#   푸시하면 GitHub 의 'pages build and deployment' 가 자동으로 사이트를 다시 올립니다 (별도 배포 작업 불필요).
 # - 알림(선택): 저장소 변수 STK_ALERTS=on 이면 흐름 변화가 있을 때 이슈에 댓글로 알려줍니다.
 
 on:
@@ -24,8 +25,6 @@ on:
 permissions:
   contents: write
   issues: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: daily-forecast
@@ -123,24 +122,3 @@ jobs:
           else
             gh issue comment "$NUM" --body-file site/alerts.md
           fi
-
-  pages:
-    # forecast-reports 브랜치 내용을 GitHub Pages 로 배포 → https://<사용자명>.github.io/<저장소>/
-    needs: forecast
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: forecast-reports
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true   # Pages 가 꺼져 있으면 켜기 시도 (권한이 없으면 Settings → Pages → Source: GitHub Actions)
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - id: deploy
-        uses: actions/deploy-pages@v4
-
