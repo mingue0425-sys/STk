@@ -58,6 +58,9 @@ LABELS = {
         "weight": "비중",
         "ref": "참고",
         "event": "이벤트",
+        "target": "목표가",
+        "stop": "손절가",
+        "touch": "도달 확률",
         "today": "기준일",
         "subtitle": "기준일 {date} · 현재가 ${price:,.2f} · {h}거래일 예측 · 상승확률 {pu:.0%} · 기대수익률 {er:+.1%}",
     },
@@ -75,6 +78,9 @@ LABELS = {
         "weight": "weight",
         "ref": "ref.",
         "event": "Event",
+        "target": "Target",
+        "stop": "Stop",
+        "touch": "P(touch)",
         "today": "As of",
         "subtitle": "As of {date} · Last ${price:,.2f} · {h}-day horizon · P(up) {pu:.0%} · E[return] {er:+.1%}",
     },
@@ -136,7 +142,7 @@ def plot_forecast(
     logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
     import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
-    from matplotlib import transforms
+    from matplotlib import patheffects, transforms
     from matplotlib.ticker import FuncFormatter, PercentFormatter
 
     detected = _setup_font()
@@ -187,6 +193,15 @@ def plot_forecast(
         end_points.append((float(med[-1]), regime_color, L["regime"]))
     ax.plot(dates, mq[0.5], color=TEXT_PRIMARY, linewidth=2.0, linestyle=(0, (4, 2)), label=L["median"])
     ax.axvline(dates[0], color=TEXT_SECONDARY, linewidth=0.8, linestyle=":")
+    for lv in fc.levels:
+        ax.axhline(lv.level, color=TEXT_SECONDARY, linewidth=0.9, linestyle=(0, (5, 3)), zorder=1)
+        below = lv.level < s0
+        ax.annotate(
+            f"{L['target'] if lv.kind == 'target' else L['stop']} ${lv.level:,.0f} · {L['touch']} {lv.prob_touch:.0%}",
+            xy=(0.005, lv.level), xycoords=("axes fraction", "data"), xytext=(2, -11 if below else 4),
+            textcoords="offset points", fontsize=8, color=TEXT_PRIMARY, zorder=6,
+            path_effects=[patheffects.withStroke(linewidth=3, foreground=SURFACE)],
+        )
     for ev_date, _ in fc.events:
         ax.axvline(ev_date, color=TEXT_SECONDARY, linewidth=0.8, linestyle=(0, (2, 2)))
         ax.annotate(L["event"], xy=(ev_date, 1.0), xycoords=("data", "axes fraction"), xytext=(3, -10),

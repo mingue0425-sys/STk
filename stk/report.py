@@ -106,6 +106,46 @@ def trend_note(fc: Forecast) -> str:
     return "시나리오 확률에 반영" if fc.trend_tilt else "참고용 · 확률에 미반영"
 
 
+def risk_lines(fc: Forecast) -> list[str]:
+    r = fc.risk
+    if r is None:
+        return []
+    return [
+        f"95% VaR {pct(-r.var95)} (5% 확률로 이보다 큰 손실)  |  CVaR {pct(-r.cvar95)} (최악 5% 평균)",
+        f"만기 손실 10% 이상 확률 {pct(r.prob_loss_10, False, 0)} · 20% 이상 {pct(r.prob_loss_20, False, 0)}  |  "
+        f"경로 중 최대낙폭 중앙값 {pct(r.mdd_median)} · 나쁜 5% {pct(r.mdd_p95)}",
+    ]
+
+
+LEVEL_KIND = {"target": "목표가", "stop": "손절가"}
+
+
+def level_headers(fc: Forecast) -> list[str]:
+    return ["구분", "가격", "현재가 대비", "기간 중 도달", "만기 유지", "도달 시점(중앙)"] + [lbl for lbl, _ in fc.checkpoints]
+
+
+def level_rows(fc: Forecast) -> list[list[str]]:
+    rows = []
+    for lv in fc.levels:
+        rows.append(
+            [LEVEL_KIND[lv.kind], money(lv.level), pct(lv.rel), pct(lv.prob_touch, False, 0),
+             pct(lv.prob_end_beyond, False, 0), f"{lv.median_days:.0f}거래일" if lv.median_days else "-"]
+            + [pct(lv.prob_by[lbl], False, 0) for lbl, _ in fc.checkpoints]
+        )
+    return rows
+
+
+def race_text(fc: Forecast) -> str | None:
+    r = fc.race
+    if not r:
+        return None
+    return (
+        f"목표가 {money(r['target'])} 먼저 도달 {pct(r['target_first'], False, 0)}  ·  "
+        f"손절가 {money(r['stop'])} 먼저 도달 {pct(r['stop_first'], False, 0)}  ·  "
+        f"기간 내 둘 다 미도달 {pct(r['neither'], False, 0)}"
+    )
+
+
 def regime_summary_line(fc: Forecast) -> str:
     st = fc.regime.state
     cur = st.current_regime
@@ -150,6 +190,17 @@ def render_text(fc: Forecast) -> str:
         f"−20% 도달 확률 {pct(fc.mix_prob_hit_down, False, 0)}  |  최유력 시나리오: {ol.dominant}"
     )
     out.append("")
+    if fc.risk is not None:
+        out.append("■ 위험 지표")
+        out.extend(f"  {line}" for line in risk_lines(fc))
+        out.append("")
+    if fc.levels:
+        out.append("■ 목표가 / 손절가 분석")
+        out.append(_indent(table(level_headers(fc), level_rows(fc))))
+        if race_text(fc):
+            out.append(f"  ▶ {race_text(fc)}")
+        out.append("  ※ '만기 유지' = 만기일에 목표가 이상(손절가는 이하)에 있을 확률. 도달 확률은 장중 고가·저가가 아닌 종가 기준")
+        out.append("")
 
     # 2. 현재 상태 진단
     out.append("■ 현재 상태 진단")
@@ -346,6 +397,21 @@ def render_markdown(fc: Forecast, chart_name: str | None = None) -> str:
     md.append(f"| 기간 중 +20% / −20% 도달 확률 | {pct(fc.mix_prob_hit_up, False, 0)} / {pct(fc.mix_prob_hit_down, False, 0)} |")
     md.append(f"| 최유력 시나리오 | {ol.dominant} |")
     md.append("")
+    if fc.risk is not None:
+        md.append("## 위험 지표")
+        md.append("")
+        md.extend(f"- {line}" for line in risk_lines(fc))
+        md.append("")
+    if fc.levels:
+        md.append("## 목표가 / 손절가 분석")
+        md.append("")
+        hdr = level_headers(fc)
+        md.append("| " + " | ".join(hdr) + " |\n|" + "---|" * 2 + "---:|" * (len(hdr) - 2))
+        md.extend("| " + " | ".join(r) + " |" for r in level_rows(fc))
+        if race_text(fc):
+            md.append("")
+            md.append(f"**{race_text(fc)}**")
+        md.append("")
     if chart_name:
         md.append(f"![{fc.symbol} forecast]({chart_name})")
         md.append("")

@@ -16,7 +16,21 @@ import numpy as np
 import pandas as pd
 
 from .forecast import QUANTILES, Forecast
-from .report import DISCLAIMER, drift_text, market_lines, model_text, money, pct, regime_summary_line, trend_note
+from .report import (
+    DISCLAIMER,
+    LEVEL_KIND,
+    drift_text,
+    level_headers,
+    level_rows,
+    market_lines,
+    model_text,
+    money,
+    pct,
+    race_text,
+    regime_summary_line,
+    risk_lines,
+    trend_note,
+)
 
 HISTORY_DAYS = 252
 
@@ -89,6 +103,8 @@ def _payload(fc: Forecast, prices) -> dict:
             "lines": lines,
         },
         "events": [d.strftime("%Y-%m-%d") for d, _ in fc.events],
+        "levels": [{"label": LEVEL_KIND[lv.kind], "level": round(lv.level, 2), "p": round(lv.prob_touch, 4)}
+                   for lv in fc.levels],
         "dist": {"bins": _r(bins, 4), "groups": dist_groups},
         "scenarios": [
             {"name": r.scenario.name, "slot": r.scenario.color_slot % 8, "p": round(r.scenario.probability, 4),
@@ -203,6 +219,21 @@ def render_html(fc: Forecast, prices) -> str:
     ol = fc.outlook
     events = "".join(f"<li>{d:%Y-%m-%d} — 하루 충격 ±{s:.1%}</li>" for d, s in fc.events)
     market = "".join(f"<li>{_e(line.strip())}</li>" for line in market_lines(fc) if line.strip())
+    risk_block = ""
+    if fc.risk is not None:
+        items = "".join(f"<li>{_e(line)}</li>" for line in risk_lines(fc))
+        levels = ""
+        if fc.levels:
+            levels = "<h3>목표가 / 손절가</h3>" + _table(level_headers(fc), level_rows(fc), num_from=1)
+            if race_text(fc):
+                levels += f'<p class="lead"><strong>{_e(race_text(fc))}</strong></p>'
+            levels += '<p class="note">만기 유지 = 만기일에 목표가 이상(손절가는 이하)에 있을 확률 · 종가 기준</p>'
+        risk_block = f"""
+<section class="card">
+  <h2>위험 지표{' · 목표가 / 손절가' if fc.levels else ''}</h2>
+  <ul class="plain">{items}</ul>
+  {levels}
+</section>"""
     regime_block = ""
     if fc.regime is not None:
         regime_block = f"""
@@ -264,6 +295,7 @@ def render_html(fc: Forecast, prices) -> str:
 </section>
 </div>
 
+{risk_block}
 <section class="card">
   <h2>시나리오별 결과</h2>
   {_scenario_table(fc)}
@@ -347,6 +379,7 @@ color:var(--text);border-radius:999px;padding:3px 10px;font:inherit;font-size:12
 .chart{display:block;width:100%;overflow:visible;outline:none}
 .chart:focus-visible{outline:2px solid var(--s0);outline-offset:4px;border-radius:4px}
 .chart text{fill:var(--text2);font-size:11px;font-variant-numeric:tabular-nums}
+.chart text.halo{fill:var(--text);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;font-weight:600}
 .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--axis);border-radius:8px;
 padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:170px;z-index:5}
 .tip .t-date{font-weight:650;margin-bottom:4px}
@@ -435,6 +468,7 @@ function drawFan(){
   if (series[1].on) D.hist.prices.forEach(take);
   if (series[0].on) { fut.bands.p5.forEach(take); fut.bands.p95.forEach(take); }
   series.slice(2).forEach(s => { if (s.on) s.values.forEach(take); });
+  D.levels.forEach(l => take(l.level));
   if (!isFinite(lo)) { lo = D.s0 * .8; hi = D.s0 * 1.2; }
   const pad = (hi - lo) * .06; lo -= pad; hi += pad;
   const Y = v => m.t + (1 - (v - lo) / (hi - lo)) * ph;
@@ -458,6 +492,8 @@ function drawFan(){
   const tt = el('text', {x:X(H - 1) + 4, y:m.t + 10}, g); tt.textContent = '기준일';
   eventIdx.forEach(i => { el('line', {x1:X(i), x2:X(i), y1:m.t, y2:m.t + ph, stroke:'var(--muted)', 'stroke-dasharray':'4 3'}, g);
     const t = el('text', {x:X(i) + 4, y:m.t + 24}, g); t.textContent = '이벤트'; });
+  // 목표가·손절가
+  D.levels.forEach(l => el('line', {x1:m.l, x2:W - m.r, y1:Y(l.level), y2:Y(l.level), stroke:'var(--text2)', 'stroke-dasharray':'6 4', 'stroke-width':1}, g));
   // 분포 구간
   if (series[0].on) {
     const area = (a, b) => { let d = ''; a.forEach((v, j) => d += (j ? 'L' : 'M') + X(fx(j)).toFixed(1) + ',' + Y(v).toFixed(1));
@@ -470,6 +506,9 @@ function drawFan(){
     if (dash) p.setAttribute('stroke-dasharray', dash); };
   if (series[1].on) line(D.hist.prices, 0, 'var(--text)', '', 1.6);
   series.slice(2).forEach(s => { if (s.on) line(s.values, H - 1, s.color, s.dash, 2); });
+  // 목표가·손절가 라벨은 선 위에 (가독성)
+  D.levels.forEach(l => { const below = l.level < D.s0;
+    const t = el('text', {x:m.l + 6, y:Y(l.level) + (below ? 14 : -6), class:'halo'}, svg); t.textContent = `${l.label} ${fmt$(l.level)} · 도달 ${Math.round(l.p * 100)}%`; });
   // 호버 레이어
   const cross = el('line', {y1:m.t, y2:m.t + ph, stroke:'var(--text2)', 'stroke-width':1, visibility:'hidden'}, svg);
   const dots = el('g', {}, svg);

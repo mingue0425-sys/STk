@@ -106,7 +106,7 @@ def test_cli_backtest_compare(tmp_path, prices, capsys):
     assert "모델 설정 비교" in text and "국면(HMM)" in text
 
 
-@pytest.mark.parametrize("cmd", [[], ["forecast"], ["backtest"], ["scenarios"]])
+@pytest.mark.parametrize("cmd", [[], ["forecast"], ["backtest"], ["scenarios"], ["watch"], ["track"]])
 def test_help_renders(cmd, capsys):
     with pytest.raises(SystemExit) as exc:
         main([*cmd, "--help"])

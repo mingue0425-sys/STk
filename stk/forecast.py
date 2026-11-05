@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 
 import numpy as np
@@ -44,6 +44,7 @@ from .scenarios import (
 from .simulation import path_max_drawdown, simulate_paths
 
 QUANTILES = (0.05, 0.25, 0.50, 0.75, 0.95)
+LOG_QUANTILES = tuple(round(0.05 * i, 2) for i in range(1, 20))  # 기록·추적용 (5%~95%)
 CHECKPOINTS = (("1주", 5), ("1개월", 21), ("3개월", 63), ("6개월", 126), ("1년", 252), ("2년", 504))
 MOVE_THRESHOLD = 0.20  # ±20% 도달 확률 계산 기준
 MODELS = ("ensemble", "scenario", "regime")
@@ -144,6 +145,37 @@ class RegimeResult(PathSummary):
 
 
 @dataclass
+class LevelStat:
+    """목표가(위)·손절가(아래) 한 개에 대한 도달 분석 (전체 혼합 분포 기준)."""
+
+    kind: str                  # "target" | "stop"
+    level: float
+    rel: float                 # 현재가 대비
+    prob_touch: float          # 기간 중 한 번이라도 도달할 확률
+    prob_end_beyond: float     # 만기에 그 가격을 넘어서(목표가) / 밑돌아(손절가) 있을 확률
+    median_days: float | None  # 도달한 경로 기준 도달까지 걸린 거래일 중앙값
+    prob_by: dict[str, float] = field(default_factory=dict)  # 체크포인트별 누적 도달 확률
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class RiskStats:
+    """만기 손익 분포의 위험 지표 (전체 혼합 분포 기준)."""
+
+    var95: float               # 95% VaR: 5% 확률로 이보다 더 손실 (양수 = 손실률)
+    cvar95: float              # 95% CVaR: 최악 5% 경우의 평균 손실률
+    prob_loss_10: float        # 만기 손실 10% 이상 확률
+    prob_loss_20: float
+    mdd_median: float          # 경로 중 최대낙폭 중앙값 (음수)
+    mdd_p95: float             # 최대낙폭 하위 5% (나쁜 경우)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
 class Outlook:
     """확률가중(혼합) 분포로 본 전체 흐름 판정."""
 
@@ -183,6 +215,10 @@ class Forecast:
     market: MarketContext | None = None
     events: list[tuple[pd.Timestamp, float]] = field(default_factory=list)
     mix_samples: tuple[np.ndarray, np.ndarray] | None = field(default=None, repr=False)  # (만기가격, 가중치)
+    levels: list[LevelStat] = field(default_factory=list)
+    cp_quantiles: dict[int, list[float]] = field(default_factory=dict)  # 체크포인트별 5~95% 분위 가격
+    race: dict | None = None             # 목표가·손절가 중 먼저 도달할 확률
+    risk: RiskStats | None = None
 
     @property
     def s0(self) -> float:
@@ -249,6 +285,9 @@ class Forecast:
                 "prob_hit_up_20": self.mix_prob_hit_up,
                 "prob_hit_down_20": self.mix_prob_hit_down,
             },
+            "risk": self.risk.to_dict() if self.risk is not None else None,
+            "levels": [lv.to_dict() for lv in self.levels],
+            "race": self.race,
             "checkpoints": self.checkpoint_table().to_dict(orient="records"),
             "path": {
                 "dates": [d.strftime("%Y-%m-%d") for d in self.dates],
@@ -318,6 +357,8 @@ def run_forecast(
     regime_init: HMMParams | None = None,
     regime_info: bool = True,
     events: list | None = None,
+    targets: list | None = None,
+    stops: list | None = None,
     keep_paths: bool = False,
 ) -> Forecast:
     """한 종목의 예측을 실행합니다.
@@ -396,10 +437,16 @@ def run_forecast(
     mix_hit_up = float(w @ (stacked.max(axis=1) >= s0 * (1 + MOVE_THRESHOLD)) / w.sum())
     mix_hit_down = float(w @ (stacked.min(axis=1) <= s0 * (1 - MOVE_THRESHOLD)) / w.sum())
     mix_samples = (terminal_all.copy(), w / w.sum())
+    wn = w / w.sum()
+    checkpoints = [(lbl, d) for lbl, d in CHECKPOINTS if d < horizon] + [(horizon_label(horizon), horizon)]
+    risk = risk_stats(stacked, wn, s0)
+    cp_days = [d for _, d in checkpoints]
+    cpq = weighted_quantiles(stacked[:, cp_days], wn, LOG_QUANTILES)
+    cp_quantiles = {d: [float(v) for v in cpq[:, i]] for i, d in enumerate(cp_days)}
+    levels, race = level_analysis(stacked, wn, s0, resolve_levels(targets, s0), resolve_levels(stops, s0), checkpoints)
     if not keep_paths:
         del stacked, all_paths, blocks
 
-    checkpoints = [(lbl, d) for lbl, d in CHECKPOINTS if d < horizon] + [(horizon_label(horizon), horizon)]
     outlook = judge_outlook(
         s0=s0,
         horizon=horizon,
@@ -434,7 +481,95 @@ def run_forecast(
         market=market,
         events=used_events,
         mix_samples=mix_samples,
+        levels=levels,
+        race=race,
+        risk=risk,
+        cp_quantiles=cp_quantiles,
     )
+
+
+def resolve_levels(items: list | None, s0: float) -> list[float]:
+    """[400, "+15%", "-10%", 0.9(배수 아님: 가격)] → 가격 목록. 문자열 % 는 현재가 대비."""
+    out = []
+    for it in items or []:
+        if isinstance(it, str):
+            t = it.strip()
+            if t.endswith("%"):
+                out.append(s0 * (1 + float(t[:-1]) / 100))
+            else:
+                out.append(float(t))
+        else:
+            out.append(float(it))
+    return [v for v in out if v > 0]
+
+
+def _wquantile(x: np.ndarray, w: np.ndarray, q: float) -> float:
+    order = np.argsort(x)
+    cw = np.cumsum(w[order])
+    return float(x[order][min(int(np.searchsorted(cw, q * cw[-1])), len(x) - 1)])
+
+
+def risk_stats(paths: np.ndarray, w: np.ndarray, s0: float) -> RiskStats:
+    ret = paths[:, -1] / s0 - 1
+    q05 = _wquantile(ret, w, 0.05)
+    tail = ret <= q05
+    cvar = -float((w[tail] * ret[tail]).sum() / w[tail].sum()) if tail.any() else -q05
+    mdd = path_max_drawdown(paths)
+    return RiskStats(
+        var95=-q05,
+        cvar95=cvar,
+        prob_loss_10=float(w @ (ret <= -0.10)),
+        prob_loss_20=float(w @ (ret <= -0.20)),
+        mdd_median=_wquantile(mdd, w, 0.5),
+        mdd_p95=_wquantile(mdd, w, 0.05),
+    )
+
+
+def _first_touch(paths: np.ndarray, level: float, upward: bool) -> np.ndarray:
+    """경로별 처음 도달한 일자(1부터). 도달하지 않으면 inf."""
+    hit = paths[:, 1:] >= level if upward else paths[:, 1:] <= level
+    any_hit = hit.any(axis=1)
+    first = hit.argmax(axis=1).astype(float) + 1
+    first[~any_hit] = np.inf
+    return first
+
+
+def level_analysis(
+    paths: np.ndarray,
+    w: np.ndarray,
+    s0: float,
+    targets: list[float],
+    stops: list[float],
+    checkpoints: list[tuple[str, int]],
+) -> tuple[list[LevelStat], dict | None]:
+    stats: list[LevelStat] = []
+    firsts: dict[str, np.ndarray] = {}
+    for kind, levels in (("target", targets), ("stop", stops)):
+        for lv in levels:
+            upward = lv >= s0  # 현재가보다 위면 상향 돌파, 아래면 하향 이탈로 판정
+            first = _first_touch(paths, lv, upward)
+            touched = np.isfinite(first)
+            p_touch = float(w @ touched)
+            med = _wquantile(first[touched], w[touched], 0.5) if touched.any() else None
+            end = paths[:, -1] >= lv if upward else paths[:, -1] <= lv
+            stats.append(
+                LevelStat(
+                    kind=kind, level=lv, rel=lv / s0 - 1, prob_touch=p_touch, prob_end_beyond=float(w @ end),
+                    median_days=med, prob_by={lbl: float(w @ (first <= d)) for lbl, d in checkpoints},
+                )
+            )
+            firsts.setdefault(kind, first)  # 경쟁 분석은 첫 번째 목표가·손절가로
+    race = None
+    if "target" in firsts and "stop" in firsts:
+        t, st = firsts["target"], firsts["stop"]
+        race = {
+            "target": stats[0].level,
+            "stop": next(x.level for x in stats if x.kind == "stop"),
+            "target_first": float(w @ (t < st)),
+            "stop_first": float(w @ (st < t)),
+            "neither": float(w @ (~np.isfinite(t) & ~np.isfinite(st))),
+        }
+    return stats, race
 
 
 def horizon_label(days: int) -> str:

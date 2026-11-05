@@ -253,7 +253,9 @@ def render_comparison_table(symbol: str, horizon: int, summary: pd.DataFrame) ->
         "═" * 78,
         _indent(table(["설정", "50% 적중", "90% 적중", "방향 적중", "Brier", "CRPS skill", "기대-실현 상관"], rows)),
         "",
-        f"  ▶ CRPS skill 기준 최적: {summary.loc[best, '설정']}  "
-        "(차이가 1~2%p 이내면 통계적으로 의미 있는 차이로 보기 어렵습니다)",
+        f"  ▶ 이 기간 CRPS skill 최고: {summary.loc[best, '설정']}  (차이가 1~2%p 이내면 통계적으로 의미 없음)",
+        "  ※ 과거 성적이 가장 좋은 설정을 종목별로 골라 쓰는 것은 권장하지 않습니다. 10개 종목 실험에서",
+        "    '과거 최고 설정 선택'은 고정 기본값보다 오히려 예측이 1.3~1.4% 나빠졌습니다 (과거 우위가 지속되지 않음).",
+        "    이 비교는 종목 특성을 이해하는 용도로 쓰세요.",
     ]
     return "\n".join(out)

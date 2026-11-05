@@ -31,3 +31,9 @@ def prices():
 @pytest.fixture
 def bench():
     return make_prices(seed=99, mu=0.08, sigma=0.18)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_forecast_log(tmp_path, monkeypatch):
+    """테스트 중 예측 기록이 사용자 홈에 쌓이지 않도록 임시 파일로 돌립니다."""
+    monkeypatch.setenv("STK_LOG", str(tmp_path / "forecasts.jsonl"))

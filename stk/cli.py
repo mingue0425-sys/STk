@@ -29,7 +29,7 @@ from .data import (
 from .forecast import DEFAULT_MODEL, DEFAULT_REGIME_WEIGHT, DEFAULT_TREND_ON, MODELS
 from .scenarios import DEFAULT_ERP, DEFAULT_TREND_WEIGHT, TREND_WEIGHT_ON, load_spec, spec_to_json
 
-SUBCOMMANDS = {"forecast", "backtest", "scenarios"}
+SUBCOMMANDS = {"forecast", "backtest", "scenarios", "watch", "track"}
 VIX_SYMBOL, VIX3M_SYMBOL = "^VIX", "^VIX3M"
 
 
@@ -66,6 +66,33 @@ def parse_event(text: str) -> tuple[str, float | None]:
     return date, value
 
 
+def _level_parser(kind: str):
+    """목표가/손절가: 가격(400) 또는 % (목표가 '15%' = +15%, 손절가 '10%' = −10%, 부호를 쓰면 그대로)."""
+
+    def parse(text: str):
+        t = str(text).strip().replace(" ", "")
+        if t.endswith("%"):
+            body = t[:-1]
+            try:
+                value = float(body)
+            except ValueError as err:
+                raise argparse.ArgumentTypeError(f"{kind} 형식 오류: {text!r}") from err
+            if body[:1] not in "+-":
+                value = abs(value) if kind == "목표가" else -abs(value)
+            if value <= -100:
+                raise argparse.ArgumentTypeError(f"{kind} 하락률은 100% 미만이어야 합니다")
+            return f"{value:+g}%"
+        try:
+            price = float(t)
+        except ValueError as err:
+            raise argparse.ArgumentTypeError(f"{kind} 형식 오류: {text!r} (예: 400, 15%)") from err
+        if price <= 0:
+            raise argparse.ArgumentTypeError(f"{kind} 가격은 0보다 커야 합니다")
+        return price
+
+    return parse
+
+
 def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--years", type=float, default=10, help="내려받을 과거 데이터 기간(년), 기본 10")
     p.add_argument("--benchmark", default="SPY", help="베타 계산용 벤치마크, 기본 SPY ('none'이면 생략)")
@@ -94,6 +121,11 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--seed", type=int, default=42, help="난수 시드 (재현성), 기본 42")
 
 
+def _add_log(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--log", help="예측 기록 파일 (기본: ~/.local/share/stk/forecasts.jsonl 또는 환경변수 STK_LOG)")
+    p.add_argument("--no-log", action="store_true", help="예측 기록을 남기지 않음")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m stk",
@@ -114,6 +146,11 @@ def build_parser() -> argparse.ArgumentParser:
     f.add_argument("--json", action="store_true", help="텍스트 리포트 대신 JSON 요약을 출력")
     f.add_argument("--event", type=parse_event, action="append", metavar="DATE[:SIZE]",
                    help="실적 발표 등 이벤트일 (여러 번 지정 가능). SIZE 생략 시 과거 데이터로 추정")
+    _add_log(f)
+    f.add_argument("--target", type=_level_parser("목표가"), action="append", metavar="PRICE|PCT",
+                   help="목표가: 가격(예: 400) 또는 상승률(예: 15%%). 여러 번 지정 가능")
+    f.add_argument("--stop", type=_level_parser("손절가"), action="append", metavar="PRICE|PCT",
+                   help="손절가: 가격(예: 300) 또는 하락률(예: 10%% = 현재가 −10%%). 여러 번 지정 가능")
     _add_common(f)
 
     b = sub.add_parser("backtest", help="과거 시점별 예측 정확도(보정) 평가")
@@ -126,6 +163,21 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--no-save", action="store_true")
     b.add_argument("--compare", action="store_true", help="모델 설정별(앙상블/시나리오/국면/추세 제외) 성능 비교")
     _add_common(b)
+
+    w = sub.add_parser("watch", help="관심종목 일괄 예측 + 대시보드 HTML")
+    w.add_argument("tickers", nargs="*", help="티커 목록 (--file 과 함께 사용 가능)")
+    w.add_argument("--file", help="종목 목록 파일 (한 줄에 하나 또는 쉼표 구분, # 주석)")
+    w.add_argument("-H", "--horizon", type=parse_horizon, default=parse_horizon("6m"), help="예측 기간 (기본 6m)")
+    w.add_argument("-n", "--sims", type=int, default=5000, help="시나리오당 경로 수, 기본 5000")
+    w.add_argument("-o", "--out", default="output/watch", help="대시보드 저장 폴더, 기본 ./output/watch")
+    w.add_argument("--jobs", type=int, default=None, help="병렬 작업 수 (기본: CPU 코어 수)")
+    _add_common(w)
+    _add_log(w)
+
+    t = sub.add_parser("track", help="저장된 예측 기록을 실제 주가와 비교 (실전 성과)")
+    t.add_argument("--log", help="예측 기록 파일 (기본: ~/.local/share/stk/forecasts.jsonl 또는 환경변수 STK_LOG)")
+    t.add_argument("--refresh", action="store_true", help="주가 캐시를 무시하고 새로 다운로드")
+    t.add_argument("--csv-out", metavar="FILE", help="평가 결과를 CSV 로 저장")
 
     s = sub.add_parser("scenarios", help="기본 시나리오 설정(JSON) 출력")
     s.add_argument("-o", "--output", help="파일로 저장")
@@ -154,6 +206,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "backtest":
         return _cmd_backtest(args)
+    if args.command == "watch":
+        return _cmd_watch(args)
+    if args.command == "track":
+        return _cmd_track(args)
     return _cmd_forecast(args)
 
 
@@ -226,35 +282,18 @@ def _cmd_forecast(args) -> int:
     if not args.no_market and ctx["bench"] is not None:
         market = market_context(ctx["bench"], ctx["vix"], ctx["vix3m"])
 
-    trend_on, trend_weight = _trend_settings(args)
+    kwargs = _forecast_kwargs(args, ctx, market)
     forecasts = []
     for raw in args.tickers:
         ticker = normalize_symbol(raw)
         try:
             prices = _load_prices(args, ticker, ctx["cache_dir"])
-            rf = ctx["rf_fixed"] if ctx["rf_fixed"] is not None else risk_free_at(ctx["rf_series"])
-            fc = run_forecast(
-                prices,
-                ticker,
-                horizon=args.horizon,
-                n_paths=args.sims,
-                benchmark=ctx["bench"],
-                risk_free=rf,
-                erp=args.erp,
-                trend_weight=trend_weight,
-                spec=ctx["spec"],
-                tilt=trend_on,
-                stress_tilt=not args.no_stress,
-                seed=args.seed,
-                market=market,
-                model=args.model,
-                regime_weight=args.regime_weight,
-                events=args.event,
-            )
+            fc = run_forecast(prices, ticker, events=args.event, targets=args.target, stops=args.stop, **kwargs)
         except (DataError, ValueError) as err:
             print(_error_text(ticker, err), file=sys.stderr)
             continue
         forecasts.append(fc)
+        _log_forecast(args, fc)
 
         if args.json:
             print(json.dumps(_brief(fc), ensure_ascii=False, indent=2))
@@ -286,6 +325,37 @@ def _cmd_forecast(args) -> int:
     return 0 if forecasts else 1
 
 
+def _forecast_kwargs(args, ctx: dict, market) -> dict:
+    """forecast/watch 공통 run_forecast 인자."""
+    trend_on, trend_weight = _trend_settings(args)
+    return dict(
+        horizon=args.horizon,
+        n_paths=args.sims,
+        benchmark=ctx["bench"],
+        risk_free=ctx["rf_fixed"] if ctx["rf_fixed"] is not None else risk_free_at(ctx["rf_series"]),
+        erp=args.erp,
+        trend_weight=trend_weight,
+        spec=ctx["spec"],
+        tilt=trend_on,
+        stress_tilt=not args.no_stress,
+        seed=args.seed,
+        market=market,
+        model=args.model,
+        regime_weight=args.regime_weight,
+    )
+
+
+def _log_forecast(args, fc) -> None:
+    if getattr(args, "no_log", False):
+        return
+    from .tracking import append_log
+
+    try:
+        append_log(fc, args.log)
+    except OSError as err:
+        print(f"[경고] 예측 기록 저장 실패: {err}", file=sys.stderr)
+
+
 def _error_text(ticker: str, err: Exception) -> str:
     msg = str(err)
     return f"[오류] {msg}" if msg.startswith(ticker) else f"[오류] {ticker}: {msg}"
@@ -295,6 +365,76 @@ def _brief(fc) -> dict:
     d = fc.to_dict()
     d.pop("path", None)
     return d
+
+
+# ------------------------------------------------------------------ watch / track
+def _cmd_watch(args) -> int:
+    from .market import market_context
+    from .report import render_comparison
+    from .watch import read_watchlist, render_dashboard, run_watchlist, summary_json
+
+    symbols = [normalize_symbol(t) for t in args.tickers]
+    if args.file:
+        try:
+            symbols += [s for s in read_watchlist(args.file) if s not in symbols]
+        except OSError as err:
+            print(f"[오류] 종목 파일을 읽을 수 없습니다: {err}", file=sys.stderr)
+            return 2
+    symbols = list(dict.fromkeys(symbols))
+    if not symbols:
+        print("[오류] 종목을 지정하세요 (예: python -m stk watch AAPL MSFT 또는 --file watchlist.txt)", file=sys.stderr)
+        return 2
+    if args.csv:
+        print("[오류] watch 는 --csv 를 지원하지 않습니다", file=sys.stderr)
+        return 2
+    try:
+        ctx = _context(args)
+    except (OSError, ValueError) as err:
+        print(f"[오류] {err}", file=sys.stderr)
+        return 2
+    market = None
+    if not args.no_market and ctx["bench"] is not None:
+        market = market_context(ctx["bench"], ctx["vix"], ctx["vix3m"])
+
+    print(f"{len(symbols)}개 종목 예측 중 ({args.horizon}거래일, 병렬 {args.jobs or '자동'})...")
+    items = run_watchlist(
+        symbols, args.out, _forecast_kwargs(args, ctx, market), years=args.years, cache_dir=ctx["cache_dir"],
+        refresh=args.refresh, jobs=args.jobs, progress=sys.stdout.isatty(),
+    )
+    ok = [it for it in items if it.forecast is not None]
+    for it in items:
+        if it.error:
+            print(_error_text(it.symbol, ValueError(it.error)), file=sys.stderr)
+    for it in ok:
+        _log_forecast(args, it.forecast)
+    if not ok:
+        return 1
+    out = Path(args.out)
+    (out / "index.html").write_text(render_dashboard(items, args.horizon), encoding="utf-8")
+    (out / "summary.json").write_text(summary_json(items), encoding="utf-8")
+    print(render_comparison([it.forecast for it in ok]))
+    print(f"\n대시보드: {out / 'index.html'}  (종목별 리포트 {len(ok)}개, summary.json)")
+    return 0
+
+
+def _cmd_track(args) -> int:
+    from .tracking import evaluate, load_log, log_path, render_track
+
+    path = log_path(args.log)
+    records = load_log(path)
+    if not records:
+        print(f"예측 기록이 없습니다: {path}\n먼저 'python -m stk AAPL' 처럼 예측을 실행하면 자동으로 기록됩니다.")
+        return 0
+
+    def loader(sym):
+        return get_history(sym, years=3, cache_dir=DEFAULT_CACHE_DIR, refresh=args.refresh, max_age_hours=6)
+
+    result = evaluate(records, loader)
+    print(render_track(result, path))
+    if args.csv_out and len(result.evaluations):
+        result.evaluations.to_csv(args.csv_out, index=False)
+        print(f"\n저장됨: {args.csv_out}")
+    return 0
 
 
 # ------------------------------------------------------------------ backtest
