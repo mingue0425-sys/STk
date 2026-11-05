@@ -425,7 +425,6 @@ def render_markdown(fc: Forecast, chart_name: str | None = None) -> str:
     md.append(f"| 52주 고점 대비 | {pct(st.drawdown_now)} |")
     md.append(f"| 변동성 현재/1년/장기 | {pct(st.vol_now, False)} / {pct(st.vol_1y, False)} / {pct(st.vol_long, False)} |")
     md.append(f"| 베타 (vs 벤치마크) | {st.beta:.2f} |" if st.beta is not None else "| 베타 | N/A |")
-    cb = fc.calib
     md.append(
         f"| 기본 기대수익률 | {drift_text(fc)} |"
     )

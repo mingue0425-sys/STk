@@ -13,7 +13,6 @@ import json
 import math
 
 import numpy as np
-import pandas as pd
 
 from .forecast import QUANTILES, Forecast
 from .report import (

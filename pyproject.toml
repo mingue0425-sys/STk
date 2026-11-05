@@ -26,3 +26,12 @@ packages = ["stk"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP"]
+# E501: 한글 문구·HTML/JS 템플릿의 긴 줄 허용, E731: 짧은 좌표 변환 람다 허용, B905: zip 길이는 구조상 동일
+ignore = ["E501", "E731", "B905"]

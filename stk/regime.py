@@ -170,8 +170,9 @@ def fit_hmm(
     p = init if init is not None and init.k == k else _initial_params(r, k)
     p = HMMParams(p.means.copy(), p.vars.copy(), p.trans.copy(), p.init.copy())
     prev_ll = -np.inf
-    it = 0
-    for it in range(1, max_iter + 1):
+    n_iter = 0
+    while n_iter < max_iter:
+        n_iter += 1
         gamma, xi_sum, ll, _ = forward_backward(r, p)
         w = gamma.sum(axis=0) + 1e-12
         means = (gamma * r[:, None]).sum(axis=0) / w
@@ -183,7 +184,7 @@ def fit_hmm(
             prev_ll = ll
             break
         prev_ll = ll
-    p.loglik, p.n_iter = prev_ll, it
+    p.loglik, p.n_iter = prev_ll, n_iter
     return _sorted_by_vol(p)
 
 
