@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stk"
+version = "0.1.0"
+description = "미국 개별주 시나리오별 주가 흐름 예측 (몬테카를로 시뮬레이션)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "requests>=2.31",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+stk = "stk.cli:main"
+
+[tool.setuptools]
+packages = ["stk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
