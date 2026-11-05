@@ -1,7 +1,10 @@
-# 관심종목 예시 — python -m stk watch --file watchlist.txt
-# 한 줄에 하나 또는 쉼표로 구분, # 뒤는 주석
+# 관심종목 — python -m stk watch --file watchlist.txt  (Daily forecast 워크플로도 이 파일을 사용)
+# 한 줄에 하나 또는 쉼표로 구분, # 뒤는 주석. 점(.)은 자동으로 하이픈으로 변환 (BRK.B → BRK-B)
 
-AAPL, MSFT, NVDA, GOOGL, AMZN, META   # 빅테크
-TSLA
-JPM, XOM, KO, PFE                     # 업종 분산
-BRK.B                                 # 점(.)은 자동으로 BRK-B 로 변환
+AAPL, MSFT, GOOGL, AMZN, META      # 빅테크
+NVDA, AVGO, AMD                    # 반도체
+TSLA, NFLX                         # 성장주
+V, JPM, BRK.B                      # 금융·결제
+LLY, UNH, PFE                      # 헬스케어
+COST, WMT, KO                      # 소비재·유통
+XOM                                # 에너지

@@ -1,19 +1,21 @@
 name: Daily forecast
 
-# 평일 미국 장 마감 후 관심종목(watchlist.txt)을 예측해 forecast-reports 브랜치에 대시보드와 기록을 올립니다.
+# 평일 미국 장 마감 후 관심종목(watchlist.txt)을 1개월·6개월 기간으로 예측해
+# forecast-reports 브랜치에 사이트(첫 화면 + 기간별 대시보드)와 누적 기록을 올립니다.
 # - 코드 브랜치에는 아무것도 커밋하지 않습니다 (결과는 forecast-reports 브랜치에만).
 # - forecast-reports/data/forecasts.jsonl 에 예측이 쌓이고, 날짜가 지난 예측은 자동으로 실제 주가와 비교됩니다.
-# - GitHub Pages 를 forecast-reports 브랜치(/)로 켜면 대시보드를 웹 페이지로 볼 수 있습니다 (README 참고).
+# - GitHub Pages 를 forecast-reports 브랜치(/)로 켜면 웹 페이지로 볼 수 있습니다 (README 참고).
+# - 알림(선택): 저장소 변수 STK_ALERTS=on 이면 흐름 변화가 있을 때 이슈에 댓글로 알려줍니다.
 
 on:
   schedule:
     - cron: "17 22 * * 1-5"   # 평일 22:17 UTC = 미국 동부 17:17(겨울)/18:17(여름), 한국 시간 다음날 07:17
   workflow_dispatch:
     inputs:
-      horizon:
-        description: "예측 기간 (예: 1m, 3m, 6m, 1y)"
+      horizons:
+        description: "예측 기간 목록, 쉼표 구분 (예: 1m,6m 또는 3m)"
         required: false
-        default: "6m"
+        default: "1m,6m"
       tickers:
         description: "종목 (공백/쉼표 구분). 비우면 watchlist.txt 사용"
         required: false
@@ -21,6 +23,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: daily-forecast
@@ -28,13 +31,14 @@ concurrency:
 
 env:
   REPORTS_BRANCH: forecast-reports
-  HORIZON: ${{ inputs.horizon || '6m' }}
+  HORIZONS: ${{ inputs.horizons || '1m,6m' }}
   TICKERS: ${{ inputs.tickers || '' }}
+  ALERTS: ${{ vars.STK_ALERTS || 'off' }}
 
 jobs:
   forecast:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v5
 
@@ -49,8 +53,8 @@ jobs:
 
       - name: Validate inputs
         run: |
-          if ! [[ "$HORIZON" =~ ^[0-9]+(\.[0-9]+)?[dwmy]?$ ]]; then
-            echo "::error::예측 기간 형식 오류: '$HORIZON' (예: 3m, 6m, 1y)"; exit 1
+          if ! [[ "$HORIZONS" =~ ^[0-9]+(\.[0-9]+)?[dwmy]?(,[0-9]+(\.[0-9]+)?[dwmy]?)*$ ]]; then
+            echo "::error::예측 기간 형식 오류: '$HORIZONS' (예: 1m,6m)"; exit 1
           fi
           if ! [[ "$TICKERS" =~ ^[A-Za-z0-9.,^\ -]*$ ]]; then
             echo "::error::종목 입력에 허용되지 않는 문자가 있습니다: '$TICKERS'"; exit 1
@@ -67,42 +71,28 @@ jobs:
             git -C site checkout --orphan "$REPORTS_BRANCH"
             git -C site rm -rf --quiet .
           fi
-          mkdir -p site/data site/history
+          rm -rf site/latest   # 이전 버전 사이트 구조 정리 (기간별 폴더는 publish 가 다시 만듦)
 
-      - name: Forecast watchlist
+      - name: Forecast and build site
         run: |
           if [ -n "$TICKERS" ]; then
             SRC="${TICKERS//,/ }"
           else
             SRC="--file watchlist.txt"
           fi
-          rm -rf site/latest
           # shellcheck disable=SC2086  # 종목 목록은 공백으로 나눠 전달
-          python -m stk watch $SRC -H "$HORIZON" -o site/latest \
-            --log site/data/forecasts.jsonl --summary-md "$GITHUB_STEP_SUMMARY"
+          python -m stk publish $SRC --horizons "$HORIZONS" --site site --summary-md "$GITHUB_STEP_SUMMARY"
 
       - name: Track record
-        run: python -m stk track --log site/data/forecasts.jsonl | tee site/latest/track.txt
+        run: python -m stk track --log site/data/forecasts.jsonl | tee site/track.txt
 
-      - name: Build site index
-        run: |
-          DAY=$(date -u +%F)
-          cp site/latest/summary.md "site/history/$DAY.md"
-          sed -E 's#\]\(([A-Za-z0-9._-]+\.html)\)#](latest/\1)#g' site/latest/summary.md > site/README.md
-          {
-            echo ""
-            echo "---"
-            echo "대시보드: [latest/index.html](latest/index.html) · 지난 요약: [history/](history/) · 예측 기록: [data/forecasts.jsonl](data/forecasts.jsonl)"
-          } >> site/README.md
-          printf '%s\n' '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=latest/index.html">' \
-            '<title>관심종목 흐름 예측</title><a href="latest/index.html">최신 대시보드로 이동</a>' > site/index.html
-          touch site/.nojekyll
-
-      - name: Upload dashboard artifact
+      - name: Upload site artifact
         uses: actions/upload-artifact@v4
         with:
-          name: forecast-dashboard-${{ github.run_number }}
-          path: site/latest
+          name: forecast-site-${{ github.run_number }}
+          path: |
+            site
+            !site/.git
           retention-days: 14
 
       - name: Publish to reports branch
@@ -115,5 +105,19 @@ jobs:
             echo "변경 없음"
             exit 0
           fi
-          git commit -q -m "Forecast $(date -u +%F) (${HORIZON})"
+          git commit -q -m "Forecast $(date -u +%F) (${HORIZONS})"
           git push origin "HEAD:$REPORTS_BRANCH"
+
+      - name: Alert on flow changes (opt-in)
+        if: env.ALERTS == 'on' && hashFiles('site/alerts.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="관심종목 흐름 변화 알림"
+          NUM=$(gh issue list --state open --search "$TITLE in:title" --json number,title \
+                --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
+          if [ -z "$NUM" ]; then
+            gh issue create --title "$TITLE" --body-file site/alerts.md
+          else
+            gh issue comment "$NUM" --body-file site/alerts.md
+          fi

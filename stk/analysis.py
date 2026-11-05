@@ -240,21 +240,26 @@ def analyze(
     prices: pd.DataFrame | pd.Series,
     symbol: str = "",
     benchmark: pd.DataFrame | pd.Series | None = None,
+    exclude_dates: list | None = None,
 ) -> MarketStats:
-    """가격 이력으로 MarketStats 를 계산합니다. (수정종가 기준)"""
+    """가격 이력으로 MarketStats 를 계산합니다. (수정종가 기준)
+
+    exclude_dates: 변동성·꼬리 추정에서 뺄 날짜 (예: 실적 반응일 — 이벤트로 따로 시뮬레이션할 때 이중 계산 방지)
+    """
     p = _price_series(prices)
     if len(p) < MIN_OBSERVATIONS:
         raise ValueError(f"{symbol}: 분석에 최소 {MIN_OBSERVATIONS}거래일 데이터가 필요합니다 (현재 {len(p)}일)")
 
     rets = log_returns(p)
+    vol_rets = rets.drop(index=pd.DatetimeIndex(exclude_dates).intersection(rets.index)) if exclude_dates else rets
     last = float(p.iloc[-1])
-    long_rets = rets.iloc[-5 * TRADING_DAYS:]
+    long_rets = vol_rets.loc[vol_rets.index >= rets.index[max(0, len(rets) - 5 * TRADING_DAYS)]]
     year = p.iloc[-(TRADING_DAYS + 1):]
-    year_rets = rets.iloc[-TRADING_DAYS:]
+    year_rets = vol_rets.loc[vol_rets.index >= rets.index[max(0, len(rets) - TRADING_DAYS)]]
 
     vol_long = annualized_vol(long_rets)
     vol_1y = annualized_vol(year_rets)
-    vol_now = ewma_vol(rets.iloc[-2 * TRADING_DAYS:])
+    vol_now = ewma_vol(vol_rets.loc[vol_rets.index >= rets.index[max(0, len(rets) - 2 * TRADING_DAYS)]])
 
     span_years = max((p.index[-1] - p.index[0]).days / 365.25, 1e-9)
     cagr = (last / float(p.iloc[0])) ** (1.0 / span_years) - 1.0

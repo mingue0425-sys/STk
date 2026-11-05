@@ -82,6 +82,7 @@ def walk_forward(
 
     model = forecast_kwargs.get("model", "ensemble")
     forecast_kwargs.setdefault("regime_info", model != "scenario")
+    forecast_kwargs.setdefault("earnings_info", False)  # 백테스트에서는 표시용 실적일 추정 생략 (속도)
     regime_init = None
     rows = []
     for k, i in enumerate(origins):

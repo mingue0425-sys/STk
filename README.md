@@ -10,8 +10,11 @@
 - **목표가·손절가 / 위험 지표**: 도달 확률, 어느 쪽에 먼저 닿을지, 도달 시점, VaR·CVaR·최대낙폭
 - **관심종목 대시보드**: 여러 종목을 병렬로 예측해 정렬 가능한 한 페이지로 요약
 - **예측 기록 · 실전 성과 추적**: 모든 예측을 자동 기록하고, 날짜가 지나면 실제 주가와 비교해 적중률을 집계
-- **자동 실행 (GitHub Actions)**: 평일 장 마감 후 관심종목을 예측해 대시보드·기록을 `forecast-reports` 브랜치에 게시, CI로 테스트 자동 검증
-- **데이터 점검**: 오래된 데이터·공백·비정상 급변·짧은 이력을 자동으로 경고
+- **자동 실행 (GitHub Actions)**: 평일 장 마감 후 관심종목 20개를 1개월·6개월로 예측해 사이트·기록을 `forecast-reports` 브랜치에 게시, 흐름 변화 이슈 알림(선택), CI로 테스트 자동 검증
+- **요약 해설**: 흐름·범위·국면·시장·섹터·실적일을 한국어 문장으로 정리
+- **섹터 분석**: 가장 잘 맞는 섹터 ETF 자동 판별, 위험을 시장·섹터·종목 고유 몫으로 분해, 섹터 대비 상대 강도
+- **실적 발표일 추정**: 가격·거래량 패턴으로 다음 실적 발표일과 그날의 변동 폭을 추정 (표시, 선택적으로 시뮬레이션 반영)
+- **데이터 점검**: 오래된 데이터·공백·튀는 체결가·짧은 이력을 자동으로 경고
 - **백테스트**: 과거 시점마다 그때 데이터만으로 예측해 정확도·보정 상태를 검증, 모델 설정 비교
 - **리포트**: 콘솔 · 대화형 HTML · PNG 차트 · 마크다운 · JSON
 
@@ -39,6 +42,8 @@ python -m stk TSLA --target 450 --stop 330 # 가격으로 지정해도 됨
 python -m stk watch AAPL MSFT NVDA TSLA    # 관심종목 병렬 예측 → output/watch/index.html 대시보드
 python -m stk watch --file watchlist.txt   # 종목 목록 파일 사용
 python -m stk track                        # 지난 예측들을 실제 주가와 비교 (실전 성과)
+python -m stk publish --file watchlist.txt # 1개월·6개월 사이트 생성 (site/index.html) — 자동 실행이 쓰는 명령
+python -m stk NVDA --auto-events           # 추정 실적 발표일 충격을 시뮬레이션에 반영
 python -m stk backtest AAPL -H 3m          # 과거 시점별 예측 정확도 평가
 python -m stk backtest AAPL --compare      # 모델 설정별 성능 비교 (종목 특성 이해용)
 python -m stk scenarios > my.json          # 시나리오 설정 내보내기 → 수정 → --scenarios my.json
@@ -111,6 +116,34 @@ python -m stk track --csv-out eval.csv
 > 가장 쉬운 방법은 아래 GitHub Actions 자동 실행이고, 내 PC에서는 crontab 으로도 됩니다:
 > `30 7 * * 2-6 cd ~/STk && python -m stk watch --file watchlist.txt`
 
+### 요약 해설 · 섹터 분석 · 실적 발표일 추정
+
+모든 리포트 맨 앞에 숫자를 문장으로 풀어 쓴 **요약 해설**이 붙습니다 (규칙 기반, 수치는 모두 예측 결과에서 가져옴).
+
+```
+■ 요약 해설
+  NVDA의 향후 6개월 흐름은 '방향성 약한 횡보 흐름'으로 보입니다. 상승 마감 확률 52%, 기대수익률 +6.3%이며 ...
+  현재 '저변동(안정)' 국면일 가능성이 82%로 비교적 안정적인 시기이며, 6개월 뒤에는 안정 국면 확률 65% ...
+  다음 실적 발표는 11월 23일 전후(±2거래일)로 추정됩니다. 과거 실적 반응일의 하루 변동이 ±8% 안팎이었으니 ...
+  기술 섹터(XLK)와 어느 정도 함께 움직이며, 주가 변동은 시장 45% · 섹터 15% · 종목 고유 40%로 나뉩니다.
+
+■ 섹터 분석
+  섹터 기술(XLK)  |  연관도 0.52
+  위험 분해  시장 45% · 섹터 15% · 종목 고유 40%  (β 시장 1.75, 섹터 1.31)
+  섹터 대비 상대 수익률  3개월 -3.9% · 6개월 -7.5%  |  섹터 3개월 -4.7% · 섹터 추세 상승 추세
+```
+
+- **섹터 분석**: 종목과 SPDR 섹터 ETF 11개의 수익률에서 S&P500 영향을 뺀 뒤 상관이 가장 높은 ETF를 섹터로 판별하고,
+  `r = α + β시장·r_SPY + β섹터·(섹터 잔차) + ε` 로 분산을 시장·섹터·종목 고유 몫으로 나눕니다. AAPL·MSFT처럼 지수 비중이 너무 커서
+  시장 영향을 빼면 섹터 신호가 거의 남지 않는 초대형주는 '연관 약함'으로 표시합니다. (`--no-sector` 로 끔)
+- **실적 발표일 추정**: 실적 발표 다음 날에는 '시장 대비 비정상 거래량'과 '종목 고유의 큰 움직임'이 함께 나타나고, 회사는 해마다
+  비슷한 시기에 발표합니다. 과거 8년의 분기별 패턴(최근 4년 가중)으로 다음 발표일·날짜 불확실성(±거래일)·하루 충격 크기를 추정합니다.
+  과거 데이터로만 예측한 다음 분기 발표일을 실제와 비교하면 16개 종목 대부분에서 **중앙 오차 1~4일, ±7일 이내 75~100%**였습니다.
+  패턴이 뚜렷하지 않은 종목(V, KO, XOM 등)은 추정하지 않습니다.
+- **시뮬레이션 반영은 기본으로 끕니다**: 추정 실적일 충격을 넣고 그만큼 평상시 변동성에서 실적일을 뺀 모델을 백테스트했더니
+  (10개 종목, 1개월 590회 · 3개월 570회) CRPS가 1개월 +0.14%(t=0.94), 3개월 +0.31%(t=1.88)로 **개선되지 않았습니다**.
+  그래서 추정 실적일은 리포트·대시보드에 **정보로만 표시**하고, `--auto-events` 를 주면 시뮬레이션에도 반영합니다.
+
 ## 자동 실행 (GitHub Actions)
 
 저장소에 워크플로 두 개가 들어 있습니다.
@@ -118,28 +151,33 @@ python -m stk track --csv-out eval.csv
 | 워크플로 | 언제 | 하는 일 |
 |---|---|---|
 | `CI` (`.github/workflows/ci.yml`) | 코드 push · PR | Python 3.10~3.13 테스트 + ruff 린트 (네트워크 없이 합성 데이터) |
-| `Daily forecast` (`.github/workflows/daily-forecast.yml`) | 평일 22:17 UTC (한국 07:17) + 수동 실행 | `watchlist.txt` 종목 예측 → 대시보드·요약·기록을 `forecast-reports` 브랜치에 커밋 |
+| `Daily forecast` (`.github/workflows/daily-forecast.yml`) | 평일 22:17 UTC (한국 07:17) + 수동 실행 | `watchlist.txt` 종목을 1개월·6개월로 예측 → 사이트·기록을 `forecast-reports` 브랜치에 커밋 |
 
 **Daily forecast 가 만드는 것** (`forecast-reports` 브랜치 — 코드 브랜치에는 아무것도 커밋하지 않습니다):
 
 ```
-README.md              최신 요약표 (GitHub 에서 바로 보임)
-index.html             최신 대시보드로 이동 (GitHub Pages 용)
-latest/index.html      대시보드 · latest/<종목>_*.html 종목별 리포트 · summary.md/json · track.txt
+index.html             첫 화면: 기간별 요약 카드(상승/횡보/하락 종목 수, 흐름 변화, 실전 성과) → 기간별 대시보드로 이동
+README.md              기간별 요약표 (GitHub 에서 바로 보임)
+latest/1m/, latest/6m/ 기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
 history/YYYY-MM-DD.md  날짜별 요약 기록
 data/forecasts.jsonl   누적 예측 기록 → 날짜가 지나면 자동으로 실제 주가와 비교 (실전 성과)
+alerts.md              흐름 변화·불안 국면 진입·데이터 경고가 있을 때만 생성
 ```
 
-또한 실행 화면(Actions → 실행 기록)의 **Summary** 에 요약표가 표시되고, 대시보드 폴더가 14일간 **Artifact** 로 첨부됩니다.
+실행 화면(Actions → 실행 기록)의 **Summary** 에 요약표가 표시되고, 사이트 전체가 14일간 **Artifact** 로 첨부됩니다.
 
 **설정 방법**
 
-1. 관심종목은 저장소 루트의 `watchlist.txt` 를 수정해 커밋합니다.
-2. 바로 돌려 보려면: GitHub → **Actions** → **Daily forecast** → **Run workflow** (예측 기간·종목을 입력할 수 있음).
-3. 대시보드를 웹 페이지로 보려면: **Settings → Pages → Build and deployment → Source: Deploy from a branch →
-   `forecast-reports` / `(root)`** 를 선택합니다. 이후 `https://<사용자명>.github.io/<저장소>/` 에서 최신 대시보드가 열립니다.
+1. 관심종목은 저장소 루트의 `watchlist.txt` 를 수정해 커밋합니다. 기본 20종목: 빅테크(AAPL·MSFT·GOOGL·AMZN·META),
+   반도체(NVDA·AVGO·AMD), 성장주(TSLA·NFLX), 금융·결제(V·JPM·BRK.B), 헬스케어(LLY·UNH·PFE), 소비재·유통(COST·WMT·KO), 에너지(XOM).
+2. 바로 돌려 보려면: GitHub → **Actions** → **Daily forecast** → **Run workflow** (예측 기간 목록·종목을 입력할 수 있음).
+3. 웹 페이지로 보려면: **Settings → Pages → Build and deployment → Source: Deploy from a branch → `forecast-reports` / `(root)`**.
+   이후 `https://<사용자명>.github.io/<저장소>/` 에서 첫 화면이 열립니다.
    (비공개 저장소의 Pages 는 유료 플랜이 필요할 수 있습니다. 이 경우 Artifact 를 내려받아 보세요.)
-4. 예약 실행(schedule)은 **기본 브랜치에 있는 워크플로만** 동작합니다. 기본 브랜치를 바꾸면 그 브랜치에도 워크플로 파일이 있어야 합니다.
+4. **흐름 변화 알림 (선택)**: **Settings → Secrets and variables → Actions → Variables → New repository variable** 에서
+   이름 `STK_ALERTS`, 값 `on` 을 추가하면, 흐름 판정이 바뀌거나(상승확률 2%p 이상 변화) 불안 국면에 들어간 종목이 있을 때
+   '관심종목 흐름 변화 알림' 이슈에 댓글이 달립니다 (GitHub 알림으로 메일·앱 푸시 수신). 기본은 꺼져 있습니다.
+5. 예약 실행(schedule)은 **기본 브랜치에 있는 워크플로만** 동작합니다. 기본 브랜치를 바꾸면 그 브랜치에도 워크플로 파일이 있어야 합니다.
    또한 GitHub 는 60일간 활동이 없는 저장소의 예약 실행을 멈출 수 있습니다.
 
 ### 콘솔 출력 예시 (요약, AAPL 6개월 · 실적 발표일 지정)
@@ -260,7 +298,10 @@ data/forecasts.jsonl   누적 예측 기록 → 날짜가 지나면 자동으로
 | `--target` / `--stop` | | 목표가·손절가: 가격 또는 % (여러 번 지정 가능) |
 | `--log` / `--no-log` | 자동 기록 | 예측 기록 파일 위치 / 기록 끄기 |
 | `--file`, `--jobs` | | (watch) 종목 목록 파일, 병렬 작업 수 |
-| `--summary-md FILE` | | (watch) 마크다운 요약을 파일에 덧붙임 (예: `$GITHUB_STEP_SUMMARY`) |
+| `--summary-md FILE` | | (watch·publish) 마크다운 요약을 파일에 덧붙임 (예: `$GITHUB_STEP_SUMMARY`) |
+| `--auto-events` | 끔 | 추정 실적 발표일 충격을 시뮬레이션에 반영 (끄면 표시만) |
+| `--no-sector` | | 섹터 분석 끔 (섹터 ETF 11개 다운로드 생략) |
+| `--horizons`, `--site` | `1m,6m`, `site` | (publish) 예측 기간 목록, 사이트 폴더 |
 | `--scenarios` | 내장 | 사용자 시나리오 JSON |
 | `--trend` | 끔 | 추세 신호 사용: 추세 점수로 시나리오 확률 조정 + 기본 기대수익률에 추세 20% 반영 (아래 백테스트 참고) |
 | `--trend-weight` | 0 (`--trend` 시 0.2) | 기본 기대수익률에서 최근 추세 비중 |
@@ -364,7 +405,11 @@ stk/
   plotting.py     팬 차트 + 만기 수익률 분포 PNG
   backtest.py     워크포워드 백테스트 (구간 적중률, PIT, Brier, CRPS), 설정 비교
   watch.py        관심종목 병렬 예측 + 대시보드 HTML
+  publish.py      여러 예측 기간 사이트(첫 화면·기간별 대시보드·README·history·알림) 생성
   tracking.py     예측 기록(JSONL)과 실전 성과 추적
+  earnings.py     실적 발표일 추정 (가격·거래량 패턴)
+  sector.py       섹터 ETF 판별 · 위험 분해 · 상대 강도
+  narrative.py    한국어 요약 해설
   cli.py          명령행 인터페이스
 tests/            pytest (네트워크 없이 합성 데이터로 실행)
 ```

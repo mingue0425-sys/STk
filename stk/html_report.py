@@ -15,6 +15,7 @@ import math
 import numpy as np
 
 from .forecast import QUANTILES, Forecast
+from .narrative import narrative_text
 from .report import (
     DISCLAIMER,
     LEVEL_KIND,
@@ -28,6 +29,7 @@ from .report import (
     race_text,
     regime_summary_line,
     risk_lines,
+    sector_lines,
     trend_note,
 )
 
@@ -216,7 +218,8 @@ def _regime_table(fc: Forecast) -> str:
 def render_html(fc: Forecast, prices) -> str:
     data = json.dumps(_payload(fc, prices), ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     ol = fc.outlook
-    events = "".join(f"<li>{d:%Y-%m-%d} — 하루 충격 ±{s:.1%}</li>" for d, s in fc.events)
+    events = "".join(f"<li>{_e(ev.label())}</li>" for ev in fc.events)
+    sector = "".join(f"<li>{_e(line)}</li>" for line in sector_lines(fc))
     market = "".join(f"<li>{_e(line.strip())}</li>" for line in market_lines(fc) if line.strip())
     risk_block = ""
     if fc.risk is not None:
@@ -270,6 +273,7 @@ def render_html(fc: Forecast, prices) -> str:
     <div class="verdict-sub">{_e(ol.shape)} · 최유력 시나리오: {_e(ol.dominant)}</div>
   </div>
   <div class="kpis">{_kpis(fc)}</div>
+  <p class="narr">{_e(narrative_text(fc))}</p>
 </section>
 
 <section class="card">
@@ -315,6 +319,7 @@ def render_html(fc: Forecast, prices) -> str:
 <section class="card">
   <h2>시장 환경</h2>
   <ul class="plain">{market}</ul>
+  {"<h3>섹터</h3><ul class='plain'>" + sector + "</ul>" if sector else ""}
   {"<h3>이벤트</h3><ul class='plain'>" + events + "</ul>" if events else ""}
 </section>
 </div>
@@ -360,6 +365,7 @@ h2 .h-sub{font-size:12px}
 .verdict-label,.kpi-label{font-size:12px;color:var(--text2)}
 .verdict-value{font-size:24px;font-weight:700;margin:2px 0 4px;letter-spacing:-.01em}
 .verdict-sub{color:var(--text2);font-size:13px}
+.narr{grid-column:1/-1;margin:4px 0 0;padding-top:12px;border-top:1px solid var(--grid);font-size:14px;line-height:1.7}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .kpi{border:1px solid var(--grid);border-radius:10px;padding:10px 12px}
 .kpi-value{font-size:18px;font-weight:650;margin:2px 0;font-variant-numeric:tabular-nums;line-height:1.3}

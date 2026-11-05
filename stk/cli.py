@@ -28,10 +28,10 @@ from .data import (
     normalize_symbol,
     risk_free_at,
 )
-from .forecast import DEFAULT_MODEL, DEFAULT_REGIME_WEIGHT, DEFAULT_TREND_ON, MODELS
+from .forecast import DEFAULT_AUTO_EVENTS, DEFAULT_MODEL, DEFAULT_REGIME_WEIGHT, DEFAULT_TREND_ON, MODELS
 from .scenarios import DEFAULT_ERP, DEFAULT_TREND_WEIGHT, TREND_WEIGHT_ON, load_spec, spec_to_json
 
-SUBCOMMANDS = {"forecast", "backtest", "scenarios", "watch", "track"}
+SUBCOMMANDS = {"forecast", "backtest", "scenarios", "watch", "track", "publish"}
 VIX_SYMBOL, VIX3M_SYMBOL = "^VIX", "^VIX3M"
 
 
@@ -115,6 +115,9 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--regime-weight", type=float, default=DEFAULT_REGIME_WEIGHT,
                    help=f"ensemble 에서 국면(HMM) 모델 비중, 기본 {DEFAULT_REGIME_WEIGHT}")
     p.add_argument("--no-market", action="store_true", help="VIX·시장 환경을 반영하지 않음")
+    p.add_argument("--auto-events", action=argparse.BooleanOptionalAction, default=DEFAULT_AUTO_EVENTS,
+                   help=f"실적 발표일 자동 추정·반영 (기본 {'켬' if DEFAULT_AUTO_EVENTS else '끔'})")
+    p.add_argument("--no-sector", action="store_true", help="섹터 분석(섹터 ETF 11개 다운로드)을 하지 않음")
     p.add_argument("--csv", metavar="FILE", help="네트워크 대신 로컬 CSV 사용 (종목 1개일 때)")
     p.add_argument("--refresh", action="store_true", help="캐시를 무시하고 새로 다운로드")
     p.add_argument("--no-cache", action="store_true", help="로컬 캐시를 사용하지 않음")
@@ -175,6 +178,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(w)
     _add_log(w)
 
+    pb = sub.add_parser("publish", help="여러 예측 기간(예: 1m,6m) 대시보드를 정적 사이트로 생성 (자동 실행용)")
+    pb.add_argument("tickers", nargs="*", help="티커 목록 (--file 과 함께 사용 가능)")
+    pb.add_argument("--file", help="종목 목록 파일")
+    pb.add_argument("--horizons", default="1m,6m", help="예측 기간 목록, 쉼표 구분 (기본 1m,6m)")
+    pb.add_argument("--site", default="site", help="사이트 폴더 (기본 ./site)")
+    pb.add_argument("-n", "--sims", type=int, default=4000, help="시나리오당 경로 수, 기본 4000")
+    pb.add_argument("--jobs", type=int, default=None, help="병렬 작업 수")
+    pb.add_argument("--summary-md", metavar="FILE", help="README 요약을 이 파일에 덧붙임 (예: $GITHUB_STEP_SUMMARY)")
+    pb.add_argument("--log", help="예측 기록 파일 (기본: <site>/data/forecasts.jsonl)")
+    _add_common(pb)
+
     t = sub.add_parser("track", help="저장된 예측 기록을 실제 주가와 비교 (실전 성과)")
     t.add_argument("--log", help="예측 기록 파일 (기본: ~/.local/share/stk/forecasts.jsonl 또는 환경변수 STK_LOG)")
     t.add_argument("--refresh", action="store_true", help="주가 캐시를 무시하고 새로 다운로드")
@@ -211,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_watch(args)
     if args.command == "track":
         return _cmd_track(args)
+    if args.command == "publish":
+        return _cmd_publish(args)
     return _cmd_forecast(args)
 
 
@@ -244,10 +260,15 @@ def _context(args) -> dict:
                 vix3m = frame
         if vix is None:
             print("[경고] VIX 데이터를 가져오지 못해 시장 내재변동성을 반영하지 않습니다", file=sys.stderr)
+    sectors = None
+    if bench is not None and not getattr(args, "no_sector", True) and args.command in ("forecast", "watch", "publish"):
+        from .sector import load_sector_etfs
+
+        sectors = load_sector_etfs(lambda t: get_history(t, years=min(args.years, 5), cache_dir=cache_dir, refresh=args.refresh))
     spec = load_spec(args.scenarios)
     return {
         "cache_dir": cache_dir, "bench": bench, "rf_series": rf_series, "rf_fixed": rf_fixed, "spec": spec,
-        "vix": vix, "vix3m": vix3m,
+        "vix": vix, "vix3m": vix3m, "sectors": sectors,
     }
 
 
@@ -344,6 +365,8 @@ def _forecast_kwargs(args, ctx: dict, market) -> dict:
         model=args.model,
         regime_weight=args.regime_weight,
         today=pd.Timestamp.today().normalize(),
+        auto_events=args.auto_events,
+        sectors=ctx.get("sectors"),
     )
 
 
@@ -443,6 +466,61 @@ def _cmd_watch(args) -> int:
     return 0
 
 
+def _cmd_publish(args) -> int:
+    from .market import market_context
+    from .publish import publish_site
+    from .watch import read_watchlist
+
+    symbols = [normalize_symbol(t) for t in args.tickers]
+    if args.file:
+        try:
+            symbols += [s for s in read_watchlist(args.file) if s not in symbols]
+        except OSError as err:
+            print(f"[오류] 종목 파일을 읽을 수 없습니다: {err}", file=sys.stderr)
+            return 2
+    symbols = list(dict.fromkeys(symbols))
+    if not symbols:
+        print("[오류] 종목을 지정하세요 (티커 또는 --file)", file=sys.stderr)
+        return 2
+    try:
+        horizons = [parse_horizon(h) for h in str(args.horizons).replace(" ", "").split(",") if h]
+    except argparse.ArgumentTypeError as err:
+        print(f"[오류] {err}", file=sys.stderr)
+        return 2
+    try:
+        ctx = _context(args)
+    except (OSError, ValueError) as err:
+        print(f"[오류] {err}", file=sys.stderr)
+        return 2
+    market = None
+    if not args.no_market and ctx["bench"] is not None:
+        market = market_context(ctx["bench"], ctx["vix"], ctx["vix3m"])
+    args.horizon = horizons[0]  # _forecast_kwargs 호환 (기간별로 덮어씀)
+    log = args.log or str(Path(args.site) / "data" / "forecasts.jsonl")
+
+    def loader(sym):
+        return get_history(sym, years=args.years, cache_dir=ctx["cache_dir"], max_age_hours=12)
+
+    print(f"{len(symbols)}개 종목 × {len(horizons)}개 기간 예측 중 ({', '.join(str(h) for h in horizons)}거래일)...")
+    res = publish_site(symbols, args.site, horizons, _forecast_kwargs(args, ctx, market), log, loader, years=args.years,
+                       cache_dir=ctx["cache_dir"], refresh=args.refresh, jobs=args.jobs, progress=sys.stdout.isatty())
+    failed = {it.symbol: it.error for run in res.runs for it in run.items if it.error}
+    for sym, err in failed.items():
+        print(_error_text(sym, ValueError(err)), file=sys.stderr)
+    if not any(run.ok for run in res.runs):
+        return 1
+    if args.summary_md:
+        with open(args.summary_md, "a", encoding="utf-8") as fh:
+            fh.write((Path(args.site) / "README.md").read_text(encoding="utf-8") + "\n")
+    for run in res.runs:
+        flips = [s for s, c in run.changes.items() if c.outlook_changed]
+        print(f"  {run.code}: {len(run.ok)}종목" + (f" · 흐름 변화 {', '.join(flips)}" if flips else ""))
+    if res.alerts:
+        print(f"알림 {len(res.alerts)}건 → {Path(args.site) / 'alerts.md'}")
+    print(f"사이트: {Path(args.site) / 'index.html'}")
+    return 0
+
+
 def _cmd_track(args) -> int:
     from .tracking import evaluate, load_log, log_path, render_track
 
@@ -487,6 +565,7 @@ def _cmd_backtest(args) -> int:
             progress=sys.stdout.isatty(),
             erp=args.erp,
             spec=ctx["spec"],
+            auto_events=args.auto_events,
         )
         if args.compare:
             table = compare_configs(prices, ticker, regime_weight=args.regime_weight, **common)

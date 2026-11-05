@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from .forecast import Forecast
+from .narrative import narrative
 
 DISCLAIMER = (
     "※ 본 결과는 과거 가격 통계와 가정된 시나리오에 기반한 확률적 시뮬레이션이며, "
@@ -149,6 +150,20 @@ def race_text(fc: Forecast) -> str | None:
     )
 
 
+def sector_lines(fc: Forecast) -> list[str]:
+    s = fc.sector
+    if s is None:
+        return []
+    fit = f"연관도 {s.fit:.2f}" + (" · 연관 약함(시장·종목 고유 요인 위주)" if s.method == "raw" else "")
+    lines = [f"섹터 {s.name}({s.etf})  |  {fit}" + (f"  |  2순위 {s.runner_up}" if s.runner_up else ""),
+             f"위험 분해  시장 {pct(s.share_market, False, 0)} · 섹터 {pct(s.share_sector, False, 0)} · 종목 고유 {pct(s.share_idio, False, 0)}"
+             f"  (β 시장 {s.beta_market:.2f}, 섹터 {s.beta_sector:.2f})"]
+    if math.isfinite(s.rel_3m):
+        lines.append(f"섹터 대비 상대 수익률  3개월 {pct(s.rel_3m)} · 6개월 {pct(s.rel_6m)}  |  "
+                     f"섹터 3개월 {pct(s.sector_ret_3m)} · 섹터 추세 {s.sector_label}")
+    return lines
+
+
 def regime_summary_line(fc: Forecast) -> str:
     st = fc.regime.state
     cur = st.current_regime
@@ -175,8 +190,11 @@ def render_text(fc: Forecast) -> str:
     out.append(f"모델: {model_text(fc)}")
     for wmsg in fc.data_warnings:
         out.append(f"⚠ 데이터 점검: {wmsg}")
-    if fc.events:
-        out.append("이벤트: " + ", ".join(f"{d:%Y-%m-%d} (하루 충격 ±{s:.1%})" for d, s in fc.events))
+    for ev in fc.events:
+        out.append(f"이벤트: {ev.label()}")
+    if fc.next_earnings and not fc.auto_events and fc.earnings is not None:
+        out.append(f"다음 실적 발표(추정): {', '.join(d.strftime('%Y-%m-%d') for d in fc.next_earnings)} "
+                   f"±{fc.earnings.spread_days}거래일 · 과거 반응일 하루 변동 ±{fc.earnings.event_std:.1%} (시뮬레이션 미반영, --auto-events 로 반영)")
     out.append("")
 
     # 1. 전체 흐름
@@ -194,6 +212,9 @@ def render_text(fc: Forecast) -> str:
         f"  · 기간 중 +20% 도달 확률 {pct(fc.mix_prob_hit_up, False, 0)}  |  "
         f"−20% 도달 확률 {pct(fc.mix_prob_hit_down, False, 0)}  |  최유력 시나리오: {ol.dominant}"
     )
+    out.append("")
+    out.append("■ 요약 해설")
+    out.extend(_wrap(" ".join(narrative(fc)), 76, "  "))
     out.append("")
     if fc.risk is not None:
         out.append("■ 위험 지표")
@@ -241,6 +262,10 @@ def render_text(fc: Forecast) -> str:
     out.append("")
     out.append("■ 시장 환경")
     out.extend(market_lines(fc))
+    if fc.sector is not None:
+        out.append("")
+        out.append("■ 섹터 분석")
+        out.extend(f"  {line}" for line in sector_lines(fc))
     out.append(f"  기대수익률  {drift_text(fc)}  |  시나리오 폭 ±{pct(cb.spread, False)}")
     out.append("")
 
@@ -373,6 +398,21 @@ def render_comparison(forecasts: list[Forecast]) -> str:
     )
 
 
+def _wrap(text: str, width: int, prefix: str = "") -> list[str]:
+    """표시 폭(한글 2칸) 기준 줄바꿈."""
+    lines, cur = [], ""
+    for word in text.split(" "):
+        cand = f"{cur} {word}" if cur else word
+        if disp_width(cand) > width and cur:
+            lines.append(prefix + cur)
+            cur = word
+        else:
+            cur = cand
+    if cur:
+        lines.append(prefix + cur)
+    return lines
+
+
 def _indent(text: str, n: int = 2) -> str:
     return "\n".join(" " * n + line for line in text.splitlines())
 
@@ -389,8 +429,10 @@ def render_markdown(fc: Forecast, chart_name: str | None = None) -> str:
         f"- 모델: {model_text(fc)}"
         + "".join(f"\n- ⚠ 데이터 점검: {wmsg}" for wmsg in fc.data_warnings)
     )
-    if fc.events:
-        md.append("- 이벤트: " + ", ".join(f"{d:%Y-%m-%d} (하루 충격 ±{s:.1%})" for d, s in fc.events))
+    for ev in fc.events:
+        md.append(f"- 이벤트: {ev.label()}")
+    if fc.next_earnings and not fc.auto_events and fc.earnings is not None:
+        md.append(f"- 다음 실적 발표(추정): {', '.join(d.strftime('%Y-%m-%d') for d in fc.next_earnings)} ±{fc.earnings.spread_days}거래일")
     md.append("")
     md.append("## 전체 흐름 전망")
     md.append("")
@@ -403,6 +445,10 @@ def render_markdown(fc: Forecast, chart_name: str | None = None) -> str:
     md.append(f"| 변동성 | {ol.volatility} |")
     md.append(f"| 기간 중 +20% / −20% 도달 확률 | {pct(fc.mix_prob_hit_up, False, 0)} / {pct(fc.mix_prob_hit_down, False, 0)} |")
     md.append(f"| 최유력 시나리오 | {ol.dominant} |")
+    md.append("")
+    md.append("## 요약 해설")
+    md.append("")
+    md.append(" ".join(narrative(fc)))
     md.append("")
     if fc.risk is not None:
         md.append("## 위험 지표")
@@ -439,6 +485,7 @@ def render_markdown(fc: Forecast, chart_name: str | None = None) -> str:
     md.append("## 시장 환경")
     md.append("")
     md.extend(line.strip() and f"- {line.strip()}" for line in market_lines(fc))
+    md.extend(f"- {line}" for line in sector_lines(fc))
     md.append("")
     md.append("## 시나리오별 결과")
     md.append("")

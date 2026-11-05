@@ -22,6 +22,7 @@ from .data import DataError, get_history, normalize_symbol
 from .forecast import Forecast, run_forecast
 from .html_report import CSS as REPORT_CSS
 from .html_report import render_html
+from .narrative import narrative_text
 from .report import DISCLAIMER, money, pct
 
 FLIP_MIN_DELTA = 0.02  # 흐름 판정이 바뀌었다고 표시할 최소 상승확률 변화
@@ -196,12 +197,23 @@ def _spark(item: WatchItem, width: int = 168, height: int = 44) -> str:
     )
 
 
+def _sector_cell(fc: Forecast) -> str:
+    s = fc.sector
+    if s is None:
+        return '<span class="muted">-</span>'
+    rel = f" {s.rel_3m * 100:+.0f}%p" if math.isfinite(s.rel_3m) else ""
+    weak = " muted" if s.method == "raw" else ""
+    title = (f"{s.name}({s.etf}) 연관도 {s.fit:.2f} · 위험 분해 시장 {s.share_market:.0%} / 섹터 {s.share_sector:.0%} / "
+             f"고유 {s.share_idio:.0%} · 섹터 추세 {s.sector_label}")
+    return f'<span class="sec{weak}" title="{html.escape(title)}">{html.escape(s.etf)} {html.escape(s.name)}{rel}</span>'
+
+
 def _row(item: WatchItem, change: Change | None = None) -> str:
     e = html.escape
     if item.forecast is None:
         msg = (item.error or "").removeprefix(f"{item.symbol}: ")
         return (f'<tr class="err"><td class="sym">{e(item.symbol)}</td>'
-                f'<td colspan="10">오류: {e(msg)}</td></tr>')
+                f'<td colspan="11">오류: {e(msg)}</td></tr>')
     fc, ol = item.forecast, item.forecast.outlook
     icon, cls = DIRECTION[ol.direction]
     regime = "-"
@@ -220,13 +232,15 @@ def _row(item: WatchItem, change: Change | None = None) -> str:
          + (f' <span class="dw" title="{e(" / ".join(fc.data_warnings))}" aria-label="데이터 경고">⚠</span>' if fc.data_warnings else ""),
          fc.symbol, "sym"),
         (money(fc.s0), fc.s0, "num"),
-        (f'<span class="dir {cls}"><span aria-hidden="true">{icon}</span> {e(ol.label)}</span>{flow_badge}', ol.direction * 10 + ol.prob_up, ""),
+        (f'<span class="dir {cls}" title="{e(narrative_text(fc))}"><span aria-hidden="true">{icon}</span> {e(ol.label)}</span>{flow_badge}',
+         ol.direction * 10 + ol.prob_up, ""),
         (pct(ol.prob_up, False, 0), ol.prob_up, "num"),
         (delta_html, delta_key, "num"),
         (pct(ol.expected_return), ol.expected_return, "num"),
         (f"{money(ol.band90[0])} ~ {money(ol.band90[1])}", (ol.band90[1] - ol.band90[0]) / fc.s0, "num"),
         (pct(-var95), -var95 if math.isfinite(var95) else 0, "num"),
         (e(regime), regime_key, ""),
+        (_sector_cell(fc), fc.sector.rel_3m if fc.sector is not None and math.isfinite(fc.sector.rel_3m) else -9, ""),
         (f"{fc.stats.trend_score:+.2f}", fc.stats.trend_score, "num"),
         (_spark(item), 0, "sp"),
     ]
@@ -264,9 +278,16 @@ def render_dashboard(
     generated: datetime | None = None,
     changes: dict[str, Change] | None = None,
     track=None,
+    nav: list[tuple[str, str, bool]] | None = None,
 ) -> str:
+    """nav: [(라벨, 링크, 현재 페이지 여부)] — 여러 예측 기간 대시보드를 오갈 때 사용."""
     changes = changes or {}
     ok = [it for it in items if it.forecast is not None]
+    nav_html = ""
+    if nav:
+        current = ' aria-current="page"'
+        links = [f'<a href="{html.escape(href)}"{current if cur else ""}>{html.escape(lbl)}</a>' for lbl, href, cur in nav]
+        nav_html = '<nav class="hnav" aria-label="예측 기간">' + "".join(links) + "</nav>"
     generated = generated or datetime.now()
     counts = {"up": 0, "flat": 0, "down": 0}
     for it in ok:
@@ -286,10 +307,11 @@ def render_dashboard(
     market_txt = f"시장 스트레스 {market.stress:+.2f} ({market.label}) · VIX {market.vix:.1f}" if market and market.vix else ""
     tiles = "".join(f'<div class="kpi"><div class="kpi-label">{a}</div><div class="kpi-value">{b}</div></div>'
                     for a, b in summary)
-    headers = ["종목", "현재가", "전체 흐름", "상승확률", "직전 대비", "기대수익률", "90% 범위", "95% VaR", "현재 국면", "추세", "흐름"]
+    headers = ["종목", "현재가", "전체 흐름", "상승확률", "직전 대비", "기대수익률", "90% 범위", "95% VaR", "현재 국면", "섹터 (3M 상대)",
+               "추세", "흐름"]
     th = "".join(
-        f'<th class="{"num" if i in (1, 3, 4, 5, 6, 7, 9) else ""}"><button type="button" data-col="{i}">{h}</button></th>'
-        if i < 10 else f"<th>{h}</th>"
+        f'<th class="{"num" if i in (1, 3, 4, 5, 6, 7, 10) else ""}"><button type="button" data-col="{i}">{h}</button></th>'
+        if i < 11 else f"<th>{h}</th>"
         for i, h in enumerate(headers)
     )
     change_note = (f" · 직전 예측 대비 흐름 판정이 바뀐 종목 {n_flow}개" if changes else "")
@@ -306,6 +328,7 @@ def render_dashboard(
 <header class="top">
   <h1>관심종목 흐름 예측 <span class="h-sub">{horizon}거래일 · 시나리오 + 국면 앙상블</span></h1>
   <p class="meta">기준일 {as_of:%Y-%m-%d} · 생성 {generated:%Y-%m-%d %H:%M} {('· ' + html.escape(market_txt)) if market_txt else ''}</p>
+  {nav_html}
 </header>
 <section class="card"><div class="kpis five">{tiles}</div></section>
 {_track_card(track)}
@@ -323,6 +346,7 @@ def render_dashboard(
 
 
 DASH_CSS = r"""
+.wrap{max-width:1440px}
 .kpis.five{grid-template-columns:repeat(5,1fr)}
 #watch th button{all:unset;cursor:pointer;color:var(--text2);font-weight:600;font-size:12px}
 #watch th button:focus-visible{outline:2px solid var(--s0);outline-offset:2px}
@@ -338,6 +362,10 @@ DASH_CSS = r"""
 .muted{color:var(--muted)}
 .badge{display:inline-block;margin-left:6px;padding:0 6px;border:1px solid var(--axis);border-radius:999px;font-size:11px;color:var(--text2)}
 .kpi-value.small{font-size:15px}
+.sec{white-space:nowrap;cursor:help}
+.hnav{display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 16px}
+.hnav a{padding:4px 12px;border:1px solid var(--grid);border-radius:999px;color:var(--text2);text-decoration:none;font-size:13px}
+.hnav a[aria-current="page"]{background:var(--text);color:var(--surface);border-color:var(--text)}
 .dir.up span{color:var(--s0)}.dir.down span{color:var(--s7)}.dir.flat span{color:var(--muted)}
 .spark{display:block}
 .spark .b90{fill:var(--band);fill-opacity:var(--band90)}
@@ -407,11 +435,11 @@ def render_markdown_summary(
     market = ok[0].forecast.market if ok else None
     if market is not None and market.vix is not None:
         meta += f" · 시장 스트레스 {market.stress:+.2f} ({market.label}) · VIX {market.vix:.1f}"
-    lines += [meta, "", "| 종목 | 현재가 | 전체 흐름 | 상승확률 | 직전 대비 | 기대수익률 | 90% 범위 | 95% VaR | 현재 국면 |",
-              "|---|---:|---|---:|---:|---:|---:|---:|---|"]
+    lines += [meta, "", "| 종목 | 현재가 | 전체 흐름 | 상승확률 | 직전 대비 | 기대수익률 | 90% 범위 | 95% VaR | 현재 국면 | 섹터 | 다음 실적(추정) |",
+              "|---|---:|---|---:|---:|---:|---:|---:|---|---|---|"]
     for it in items:
         if it.forecast is None:
-            lines.append(f"| {it.symbol} | 오류: {(it.error or '').removeprefix(it.symbol + ': ')} | | | | | | | |")
+            lines.append(f"| {it.symbol} | 오류: {(it.error or '').removeprefix(it.symbol + ': ')} | | | | | | | | | |")
             continue
         fc, ol = it.forecast, it.forecast.outlook
         ch = changes.get(fc.symbol)
@@ -425,7 +453,8 @@ def render_markdown_summary(
         lines.append(
             f"| {link}{warn} | {money(fc.s0)} | {DIRECTION[ol.direction][0]} {ol.label} | {pct(ol.prob_up, False, 0)} | {delta} | "
             f"{pct(ol.expected_return)} | {money(ol.band90[0])} ~ {money(ol.band90[1])} | "
-            f"{pct(-fc.risk.var95) if fc.risk else '-'} | {regime} |"
+            f"{pct(-fc.risk.var95) if fc.risk else '-'} | {regime} | {fc.sector.etf if fc.sector else '-'} | "
+            f"{fc.next_earnings[0].strftime('%m-%d') if fc.next_earnings else '-'} |"
         )
     if track is not None:
         s = track.summary

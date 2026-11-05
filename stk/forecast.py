@@ -28,6 +28,7 @@ from pandas.tseries.offsets import CustomBusinessDay
 
 from .analysis import TRADING_DAYS, MarketStats, _price_series, analyze, estimate_event_std, log_returns
 from .data import check_prices
+from .earnings import EarningsModel, fit_earnings
 from .market import MarketContext
 from .regime import HMMParams, RegimeState, build_regime_state, simulate_regime_paths
 from .scenarios import (
@@ -42,6 +43,7 @@ from .scenarios import (
     load_spec,
     scenario_spec_with_fields,
 )
+from .sector import SectorInfo, analyze_sector
 from .simulation import path_max_drawdown, simulate_paths
 
 QUANTILES = (0.05, 0.25, 0.50, 0.75, 0.95)
@@ -51,6 +53,7 @@ MOVE_THRESHOLD = 0.20  # ±20% 도달 확률 계산 기준
 MODELS = ("ensemble", "scenario", "regime")
 DEFAULT_MODEL = "ensemble"
 DEFAULT_REGIME_WEIGHT = 0.7   # 백테스트(10종목, 3·6개월)에서 정확도·구간 보정이 가장 균형 잡힌 값
+DEFAULT_AUTO_EVENTS = False   # 추정 실적일을 시뮬레이션에 반영할지 (백테스트상 개선 없음 → 기본 끔, 표시만 함)
 DEFAULT_TREND_ON = False      # 추세 점수로 시나리오 확률 조정 (백테스트상 평균적으로 도움이 안 돼 기본 끔)
 
 
@@ -146,6 +149,25 @@ class RegimeResult(PathSummary):
 
 
 @dataclass
+class EventSpec:
+    """시뮬레이션에 넣는 이벤트(실적 발표 등) 하루 충격."""
+
+    date: pd.Timestamp      # (예상) 거래일
+    std: float              # 하루 충격 표준편차 (로그수익률)
+    spread: int = 0         # 날짜 불확실성 ±거래일 (0 = 정확한 날짜)
+    source: str = "user"    # "user" = 직접 지정, "auto" = 실적 발표일 자동 추정
+
+    def __iter__(self):     # (date, std) 로 풀어 쓰는 기존 코드와 호환
+        yield self.date
+        yield self.std
+
+    def label(self) -> str:
+        kind = "실적 발표 추정" if self.source == "auto" else "이벤트"
+        unc = f" ±{self.spread}거래일" if self.spread else ""
+        return f"{self.date:%Y-%m-%d}{unc} {kind} (하루 충격 ±{self.std:.1%})"
+
+
+@dataclass
 class LevelStat:
     """목표가(위)·손절가(아래) 한 개에 대한 도달 분석 (전체 혼합 분포 기준)."""
 
@@ -216,7 +238,11 @@ class Forecast:
     trend_tilt: bool = DEFAULT_TREND_ON
     regime: RegimeResult | None = None
     market: MarketContext | None = None
-    events: list[tuple[pd.Timestamp, float]] = field(default_factory=list)
+    events: list[EventSpec] = field(default_factory=list)
+    earnings: EarningsModel | None = None
+    next_earnings: list[pd.Timestamp] = field(default_factory=list)  # 예측 기간 안의 추정 실적일 (표시용)
+    auto_events: bool = False                                          # 추정 실적일을 시뮬레이션에 반영했는지
+    sector: SectorInfo | None = None
     mix_samples: tuple[np.ndarray, np.ndarray] | None = field(default=None, repr=False)  # (만기가격, 가중치)
     levels: list[LevelStat] = field(default_factory=list)
     cp_quantiles: dict[int, list[float]] = field(default_factory=dict)  # 체크포인트별 5~95% 분위 가격
@@ -271,7 +297,12 @@ class Forecast:
             "stats": self.stats.to_dict(),
             "calibration": self.calib.to_dict(),
             "market": self.market.to_dict() if self.market is not None else None,
-            "events": [{"date": d.strftime("%Y-%m-%d"), "std": s} for d, s in self.events],
+            "events": [{"date": e.date.strftime("%Y-%m-%d"), "std": e.std, "spread": e.spread, "source": e.source}
+                       for e in self.events],
+            "earnings": self.earnings.to_dict() if self.earnings is not None else None,
+            "next_earnings": [d.strftime("%Y-%m-%d") for d in self.next_earnings],
+            "auto_events": self.auto_events,
+            "sector": self.sector.to_dict() if self.sector is not None else None,
             "scenarios": [sc.to_dict() for sc in self.scenarios],
             "scenario_results": [r.summary_dict(s0) for r in self.results],
             "regime": self.regime.summary_dict(s0) if self.regime is not None else None,
@@ -326,20 +357,23 @@ def weighted_quantiles(values: np.ndarray, weights: np.ndarray, qs: tuple[float,
 
 def resolve_events(
     events: list | None, dates: pd.DatetimeIndex, default_std: float
-) -> tuple[dict[int, float], list[tuple[pd.Timestamp, float]]]:
-    """[(날짜, 표준편차 또는 None)] → {경로 인덱스: 표준편차}. 기간 밖의 이벤트는 무시."""
-    day_map: dict[int, float] = {}
-    used: list[tuple[pd.Timestamp, float]] = []
+) -> tuple[list[tuple[int, int, float]], list[EventSpec]]:
+    """[(날짜, 표준편차 또는 None) | EventSpec] → 시뮬레이션용 [(경로 인덱스, ±거래일, 표준편차)]. 기간 밖은 무시."""
+    sim: list[tuple[int, int, float]] = []
+    used: list[EventSpec] = []
     for item in events or []:
-        date, std = item if isinstance(item, (tuple, list)) else (item, None)
-        date = pd.Timestamp(date)
-        pos = int(dates.searchsorted(date))  # dates[0] = 기준일
+        if isinstance(item, EventSpec):
+            spec = item
+        else:
+            date, std = item if isinstance(item, (tuple, list)) else (item, None)
+            spec = EventSpec(pd.Timestamp(date), float(std) if std is not None else default_std)
+        pos = int(dates.searchsorted(pd.Timestamp(spec.date)))  # dates[0] = 기준일
         if pos < 1 or pos >= len(dates):
             continue
-        s = float(std) if std is not None else default_std
-        day_map[pos - 1] = day_map.get(pos - 1, 0.0) + s  # 같은 날 여러 이벤트는 합산(보수적)
-        used.append((dates[pos], s))
-    return day_map, used
+        spec = EventSpec(dates[pos], spec.std, spec.spread, spec.source)
+        sim.append((pos - 1, spec.spread, spec.std))
+        used.append(spec)
+    return sim, used
 
 
 def run_forecast(
@@ -365,6 +399,9 @@ def run_forecast(
     targets: list | None = None,
     stops: list | None = None,
     today: pd.Timestamp | None = None,
+    auto_events: bool = DEFAULT_AUTO_EVENTS,
+    earnings_info: bool = True,
+    sectors: dict | None = None,
     keep_paths: bool = False,
 ) -> Forecast:
     """한 종목의 예측을 실행합니다.
@@ -379,7 +416,12 @@ def run_forecast(
     if model not in MODELS:
         raise ValueError(f"model 은 {MODELS} 중 하나여야 합니다")
     spec = scenario_spec_with_fields(spec or load_spec(None))
-    stats = analyze(prices, symbol=symbol, benchmark=benchmark)
+    earnings = None
+    if (auto_events or earnings_info) and isinstance(prices, pd.DataFrame):
+        earnings = fit_earnings(prices, benchmark if isinstance(benchmark, pd.DataFrame) else None)
+    use_earn = auto_events and earnings is not None   # 시뮬레이션 반영 여부 (아니면 표시만)
+    exclude = earnings.past_events if use_earn else None
+    stats = analyze(prices, symbol=symbol, benchmark=benchmark, exclude_dates=exclude)
     data_warnings = check_prices(prices, today=today)
     calib = calibrate(
         stats, risk_free=risk_free, erp=erp, trend_weight=trend_weight, vol_halflife=vol_halflife,
@@ -398,13 +440,21 @@ def run_forecast(
     rng = np.random.default_rng(seed)
     s0 = stats.last_price
     dates = pd.DatetimeIndex([stats.last_date]).append(future_trading_days(stats.last_date, horizon))
-    event_days, used_events = resolve_events(events, dates, estimate_event_std(prices) if events else 0.0)
+    all_events: list = list(events or [])
+    if use_earn:
+        user_dates = {pd.Timestamp(e.date if isinstance(e, EventSpec) else (e[0] if isinstance(e, (tuple, list)) else e))
+                      for e in all_events}
+        for d in earnings.next_dates(stats.last_date, dates[-1]):
+            if all(abs((d - u).days) > 7 for u in user_dates):  # 직접 지정한 이벤트가 있으면 그쪽 우선
+                all_events.append(EventSpec(d, earnings.event_std, earnings.spread_days, "auto"))
+    default_std = earnings.event_std if use_earn else (estimate_event_std(prices) if events else 0.0)
+    event_days, used_events = resolve_events(all_events, dates, default_std)
 
     # ---- 시나리오 모델
     results: list[ScenarioResult] = []
     all_paths: list[np.ndarray] = []
     for sc in scenarios:
-        paths = simulate_paths(s0, sc, calib, horizon, n_paths, rng, event_days=event_days)
+        paths = simulate_paths(s0, sc, calib, horizon, n_paths, rng, events=event_days)
         results.append(ScenarioResult(**vars(summarize_paths(paths, s0)), scenario=sc))
         all_paths.append(paths)
 
@@ -413,13 +463,16 @@ def run_forecast(
     regime: RegimeResult | None = None
     regime_paths = None
     if w_r > 0 or regime_info:
-        rets = log_returns(_price_series(prices)).to_numpy()
+        rets_s = log_returns(_price_series(prices))
+        if exclude:  # 실적 반응일은 이벤트로 따로 넣으므로 국면 학습에서 제외 (이중 계산 방지)
+            rets_s = rets_s.drop(index=pd.DatetimeIndex(exclude).intersection(rets_s.index))
+        rets = rets_s.to_numpy()
         try:
             state = build_regime_state(rets, calib.base_drift, init=regime_init)
         except ValueError:
             state = None  # 데이터 부족 → 시나리오 모델만 사용
         if state is not None:
-            regime_paths = simulate_regime_paths(s0, state, horizon, n_paths, rng, event_days=event_days)
+            regime_paths = simulate_regime_paths(s0, state, horizon, n_paths, rng, events=event_days)
             regime = RegimeResult(**vars(summarize_paths(regime_paths, s0)), state=state, weight=w_r)
     if regime is None:
         w_r = 0.0
@@ -487,6 +540,11 @@ def run_forecast(
         regime=regime,
         market=market,
         events=used_events,
+        earnings=earnings,
+        next_earnings=(earnings.next_dates(stats.last_date, dates[-1]) if earnings is not None else []),
+        auto_events=use_earn,
+        sector=(analyze_sector(prices, benchmark, sectors, as_of=stats.last_date)
+                if sectors and benchmark is not None else None),
         mix_samples=mix_samples,
         levels=levels,
         race=race,

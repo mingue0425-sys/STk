@@ -137,7 +137,7 @@ def test_resolve_events():
     dates = pd.DatetimeIndex(pd.bdate_range("2026-01-02", periods=11))
     days, used = resolve_events([("2026-01-06", 0.05), ("2026-01-10", None), ("2030-01-01", None)], dates, 0.07)
     # 01-06 은 dates[2] → 경로 인덱스 1, 01-10(토) 은 다음 거래일 01-12 = dates[6] → 인덱스 5
-    assert days == {1: 0.05, 5: 0.07}
+    assert days == [(1, 0, 0.05), (5, 0, 0.07)]
     assert [d.strftime("%m-%d") for d, _ in used] == ["01-06", "01-12"]
 
 

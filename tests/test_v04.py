@@ -25,12 +25,12 @@ def test_check_prices_clean():
 def test_check_prices_flags_problems():
     px = make_prices(n=300)
     s = px["adj_close"].copy()
-    s.iloc[150:] *= 2.0  # 하루 +100% 점프
+    s.iloc[150] *= 2.0  # 하루만 +100% 튀었다가 되돌아옴 (잘못된 체결가 모양)
     px["adj_close"] = s
     px = px.drop(px.index[200:215])  # 15 영업일 공백
     w = check_prices(px, today=px.index[-1] + pd.Timedelta(days=30))
     text = " ".join(w)
-    assert "±35%" in text and "공백" in text and "영업일 전" in text
+    assert "되돌아온" in text and "공백" in text and "영업일 전" in text
     assert any("짧아" in x for x in check_prices(make_prices(n=120)))
 
 
@@ -177,3 +177,11 @@ def test_summary_json_roundtrip(tmp_path):
     data = json.loads(watch_mod.summary_json([it]))
     assert data[0]["symbol"] == "AAA" and "path" not in data[0]
     assert np.isfinite(data[0]["overall"]["prob_up"])
+
+
+def test_real_one_way_crash_not_flagged():
+    px = make_prices(n=600)
+    s = px["adj_close"].copy()
+    s.iloc[300:] *= 0.6  # 실적 쇼크처럼 한 번에 −40% 후 그 수준 유지 → 데이터 오류 아님
+    px["adj_close"] = s
+    assert not any("되돌아온" in w for w in check_prices(px))

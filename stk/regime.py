@@ -238,7 +238,7 @@ def simulate_regime_paths(
     horizon: int,
     n_paths: int,
     rng: np.random.Generator,
-    event_days: dict[int, float] | None = None,
+    events: list[tuple[int, int, float]] | None = None,
 ) -> np.ndarray:
     """국면 전환 몬테카를로. 반환: (n_paths, horizon + 1) 가격 경로."""
     a = state.params.trans
@@ -254,10 +254,9 @@ def simulate_regime_paths(
     mu_d = (state.drift - 0.5 * state.vol**2) * dt
     sd_d = state.vol * math.sqrt(dt)
     log_ret = mu_d[states] + sd_d[states] * rng.standard_normal((n_paths, horizon))
-    if event_days:
-        for day, std in event_days.items():
-            if 0 <= day < horizon:
-                log_ret[:, day] += std * rng.standard_normal(n_paths) - 0.5 * std**2
+    from .simulation import apply_events
+
+    apply_events(log_ret, events, rng)
     paths = np.empty((n_paths, horizon + 1))
     paths[:, 0] = s0
     paths[:, 1:] = s0 * np.exp(np.cumsum(log_ret, axis=1))

@@ -23,6 +23,25 @@ from .scenarios import Calibration, Scenario
 DT = 1.0 / TRADING_DAYS
 
 
+def apply_events(log_ret: np.ndarray, events, rng: np.random.Generator) -> None:
+    """이벤트 충격을 더합니다. events: [(중심 일자 인덱스, ±불확실 거래일, 충격 표준편차)].
+
+    불확실 범위가 있으면 경로마다 그 범위 안에서 날짜를 무작위로 골라 충격을 줍니다 (평균은 가격 기준 0).
+    """
+    n, h = log_ret.shape
+    for center, spread, std in events or []:
+        if std <= 0:
+            continue
+        if spread <= 0:
+            if 0 <= center < h:
+                log_ret[:, center] += std * rng.standard_normal(n) - 0.5 * std**2
+            continue
+        days = rng.integers(center - spread, center + spread + 1, size=n)
+        ok = (days >= 0) & (days < h)
+        idx = np.nonzero(ok)[0]
+        log_ret[idx, days[ok]] += std * rng.standard_normal(len(idx)) - 0.5 * std**2
+
+
 def phase_lengths(fracs: list[float], horizon: int) -> list[int]:
     """국면 비중을 거래일 수로 나눕니다 (합 = horizon, 반올림 오차는 마지막 국면에)."""
     lengths = [int(round(f * horizon)) for f in fracs[:-1]]
@@ -75,11 +94,11 @@ def simulate_paths(
     horizon: int,
     n_paths: int,
     rng: np.random.Generator,
-    event_days: dict[int, float] | None = None,
+    events: list[tuple[int, int, float]] | None = None,
 ) -> np.ndarray:
     """가격 경로 배열 (n_paths, horizon + 1)을 반환합니다. 0열은 현재가.
 
-    event_days: {경로상 일자 인덱스(0 = 첫 미래 거래일): 충격 표준편차(로그)}
+    events: [(경로상 일자 인덱스(0 = 첫 미래 거래일), ±불확실 거래일, 충격 표준편차(로그))]
     """
     if horizon < 1:
         raise ValueError("horizon 은 1 거래일 이상이어야 합니다")
@@ -105,10 +124,7 @@ def simulate_paths(
                 np.nonzero(has)[1]
             ] * z
 
-    if event_days:
-        for day, std in event_days.items():
-            if 0 <= day < horizon and std > 0:
-                log_ret[:, day] += std * rng.standard_normal(n_paths) - 0.5 * std**2
+    apply_events(log_ret, events, rng)
 
     paths = np.empty((n_paths, horizon + 1))
     paths[:, 0] = s0

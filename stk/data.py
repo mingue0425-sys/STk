@@ -170,10 +170,12 @@ def check_prices(frame: pd.DataFrame | pd.Series, today: pd.Timestamp | None = N
     if len(s) < 252:
         warnings.append(f"데이터가 {len(s)}거래일로 짧아 200일선·1년 추세·국면 모델의 신뢰도가 낮습니다")
     r = np.log(s / s.shift(1)).dropna()
-    big = r[r.abs() > 0.35]
-    if len(big):
-        d, v = big.index[-1], float(big.iloc[-1])
-        warnings.append(f"하루 ±35% 이상 변동 {len(big)}회 (최근 {d:%Y-%m-%d} {np.expm1(v):+.0%}) — 실제 사건인지 데이터 오류인지 확인하세요")
+    # 잘못된 체결가(튀는 값)는 '하루 크게 튀었다가 다음 날 거의 되돌아오는' 모양 → 이 경우만 경고
+    nxt = r.shift(-1)
+    spike = (r.abs() > 0.25) & (np.sign(nxt) == -np.sign(r)) & ((r + nxt).abs() < 0.3 * r.abs())
+    if spike.any():
+        d = r.index[spike.to_numpy()][-1]
+        warnings.append(f"하루 급변 후 바로 되돌아온 값 {int(spike.sum())}회 (최근 {d:%Y-%m-%d} {np.expm1(float(r.loc[d])):+.0%}) — 잘못된 체결가일 수 있습니다")
     if len(s) > 1:
         gaps = np.busday_count(s.index[:-1].values.astype("datetime64[D]"), s.index[1:].values.astype("datetime64[D]"))
         if len(gaps) and gaps.max() > 7:
