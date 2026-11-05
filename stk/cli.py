@@ -73,7 +73,7 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--erp", type=float, default=DEFAULT_ERP, help=f"주식 위험 프리미엄, 기본 {DEFAULT_ERP}")
     p.add_argument(
         "--trend", action=argparse.BooleanOptionalAction, default=DEFAULT_TREND_ON,
-        help=f"추세 신호 사용: 추세 점수로 시나리오 확률 조정 + 기본 기대수익률에 추세 {TREND_WEIGHT_ON:.0%} 반영 "
+        help=f"추세 신호 사용: 추세 점수로 시나리오 확률 조정 + 기본 기대수익률에 추세 {TREND_WEIGHT_ON * 100:.0f}%% 반영 "
              f"(기본 {'켬' if DEFAULT_TREND_ON else '끔'})",
     )
     p.add_argument(

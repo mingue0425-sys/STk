@@ -220,7 +220,7 @@ COMPARE_CONFIGS = {
 }
 
 
-def compare_configs(prices: pd.DataFrame, symbol: str, regime_weight: float = 0.5, **common) -> pd.DataFrame:
+def compare_configs(prices: pd.DataFrame, symbol: str, regime_weight: float = 0.7, **common) -> pd.DataFrame:
     """여러 모델 설정을 같은 조건으로 백테스트해 요약표를 반환합니다."""
     progress = common.pop("progress", False)
     rows = []

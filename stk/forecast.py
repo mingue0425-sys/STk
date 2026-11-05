@@ -48,7 +48,7 @@ CHECKPOINTS = (("1주", 5), ("1개월", 21), ("3개월", 63), ("6개월", 126), 
 MOVE_THRESHOLD = 0.20  # ±20% 도달 확률 계산 기준
 MODELS = ("ensemble", "scenario", "regime")
 DEFAULT_MODEL = "ensemble"
-DEFAULT_REGIME_WEIGHT = 0.5
+DEFAULT_REGIME_WEIGHT = 0.7   # 백테스트(10종목, 3·6개월)에서 정확도·구간 보정이 가장 균형 잡힌 값
 DEFAULT_TREND_ON = False      # 추세 점수로 시나리오 확률 조정 (백테스트상 평균적으로 도움이 안 돼 기본 끔)
 
 
