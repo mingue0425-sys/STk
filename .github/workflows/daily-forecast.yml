@@ -24,6 +24,8 @@ on:
 permissions:
   contents: write
   issues: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: daily-forecast
@@ -121,3 +123,24 @@ jobs:
           else
             gh issue comment "$NUM" --body-file site/alerts.md
           fi
+
+  pages:
+    # forecast-reports 브랜치 내용을 GitHub Pages 로 배포 → https://<사용자명>.github.io/<저장소>/
+    needs: forecast
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: forecast-reports
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true   # Pages 가 꺼져 있으면 켜기 시도 (권한이 없으면 Settings → Pages → Source: GitHub Actions)
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
