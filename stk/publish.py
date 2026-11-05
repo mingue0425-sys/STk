@@ -66,6 +66,7 @@ def _track_for(records: list[dict], horizon: int, loader) -> TrackResult:
 def build_alerts(runs: list[HorizonRun]) -> list[str]:
     """알림거리: 흐름 판정 변화(상승확률 2%p 이상), 고변동 국면 진입, 데이터 경고."""
     alerts = []
+    regime_seen: set[str] = set()  # 국면은 기간과 무관한 종목 상태 → 종목당 한 번만
     for run in runs:
         label = horizon_label(run.horizon)
         for it in run.ok:
@@ -74,10 +75,11 @@ def build_alerts(runs: list[HorizonRun]) -> list[str]:
             if ch is not None and ch.outlook_changed:
                 alerts.append(f"[{label}] {fc.symbol}: 흐름 판정 '{ch.prev_outlook}' → '{fc.outlook.label}' "
                               f"(상승확률 {ch.d_prob_up * 100:+.0f}%p, 직전 예측 {ch.prev_as_of})")
-            if ch is not None and ch.regime_changed and fc.regime is not None:
+            if ch is not None and ch.regime_changed and fc.regime is not None and fc.symbol not in regime_seen:
                 st = fc.regime.state
                 if st.current_regime == len(st.names) - 1:
-                    alerts.append(f"[{label}] {fc.symbol}: '{st.names[-1]}' 국면 진입 ({st.current[-1]:.0%}, 직전 {ch.prev_regime})")
+                    regime_seen.add(fc.symbol)
+                    alerts.append(f"{fc.symbol}: '{st.names[-1]}' 국면 진입 ({st.current[-1]:.0%}, 직전 {ch.prev_regime})")
         if run is runs[0]:  # 데이터 경고는 한 번만
             for it in run.ok:
                 for w in it.forecast.data_warnings:

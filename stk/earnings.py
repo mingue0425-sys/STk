@@ -6,6 +6,7 @@
 1. 비정상 점수 = (거래량 / 50일 중앙값) ÷ (SPY 같은 비율) × √(|베타 제거 수익률| / 60일 변동성)
 2. 1차: 분기마다 '분기말 이후 6~84일' 구간의 최고 점수일 → 점수 가중 커널 밀도로 회사의 대표 발표 시점(분기말 +N일)
 3. 2차: 대표 시점 ±12일 안에서만 다시 고름 → 시장 전체 충격일 같은 엉뚱한 날을 걸러냄
+   최근 3년(오늘 기준) 강한 반응일이 6개 미만이거나, 최근 약 13개월 안에 2개 미만이면 '패턴 없음' (예전 패턴만 남은 종목 제외)
 4. 계절(1~4분기)별로 발표 시점이 일관되면(중앙값 편차 ≤ 5일) 그 값을, 아니면 대표 시점을 사용
 5. 다음 발표일 = 분기말 + 추정 일수, 날짜 불확실성 ±N거래일 (경로마다 그 범위에서 무작위로 배치)
 
@@ -25,6 +26,7 @@ WINDOW = 12                        # 2차 선택 폭 (±일)
 STRONG_SCORE = 2.5                 # '실적 반응일'로 볼 최소 점수
 MIN_EVENTS = 6                     # 최근 기간 강한 이벤트가 이보다 적으면 패턴 없음으로 판단
 MIN_CONSISTENCY = 0.4              # 분기별 선택일 중 강한 반응일 비율이 이보다 낮으면 패턴 없음
+FRESH_DAYS, MIN_FRESH = 400, 2     # 최근 약 13개월 안에 강한 반응일이 이보다 적으면 '지금은 안 맞는 패턴'으로 판단
 
 
 @dataclass
@@ -118,7 +120,8 @@ def fit_earnings(
     d = abnormal_scores(prices, benchmark)
     if d is None or len(d) < 400:
         return None
-    d = d[d.index >= d.index[-1] - pd.DateOffset(years=years)]
+    end = d.index[-1]  # 데이터 마지막 날 (분기 구간 필터 전)
+    d = d[d.index >= end - pd.DateOffset(years=years)]
     d = d[(d["off"] >= MIN_OFFSET) & (d["off"] <= MAX_OFFSET)]
     if d["qtr"].nunique() < 8:
         return None
@@ -129,8 +132,9 @@ def fit_earnings(
         return None
     picks = win.loc[win.groupby("qtr")["score"].idxmax()]
     strong = picks[picks["score"] >= STRONG_SCORE]
-    recent = strong[strong.index >= strong.index.max() - pd.DateOffset(years=3)] if len(strong) else strong
-    if len(recent) < MIN_EVENTS or len(strong) / len(picks) < MIN_CONSISTENCY:
+    recent = strong[strong.index >= end - pd.DateOffset(years=3)]   # 최근 3년 = 오늘 기준 (마지막 반응일 기준 아님)
+    fresh = strong[strong.index >= end - pd.Timedelta(days=FRESH_DAYS)]
+    if len(recent) < MIN_EVENTS or len(strong) / len(picks) < MIN_CONSISTENCY or len(fresh) < MIN_FRESH:
         return None
 
     season: dict[int, float] = {}

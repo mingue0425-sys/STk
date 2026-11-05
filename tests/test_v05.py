@@ -71,6 +71,18 @@ def test_fit_earnings_none_without_pattern_or_volume():
     assert fit_earnings(px2.drop(columns=["volume"]), _bench()) is None  # 거래량 없음
 
 
+def test_fit_earnings_rejects_stale_pattern():
+    px, events = _with_earnings(n=2100)
+    stop = events[-6]  # 마지막 약 1년 반 동안은 실적 반응이 사라진 종목
+    px.loc[px.index >= stop, "volume"] = px["volume"].iloc[:100].median()
+    r = np.log(px["adj_close"]).diff().fillna(0.0)
+    calm = px.index >= stop
+    r[calm] = np.random.default_rng(5).normal(0.0003, 0.012, int(calm.sum()))
+    px["adj_close"] = px["close"] = 100 * np.exp(r.cumsum())
+    assert fit_earnings(px.loc[:stop], _bench()) is not None   # 그때까지는 패턴이 뚜렷
+    assert fit_earnings(px, _bench()) is None                   # 지금 기준으로는 오래된 패턴 → 표시 안 함
+
+
 def test_auto_events_in_forecast_and_vol_exclusion():
     px, _ = _with_earnings()
     off = run_forecast(px, "E", horizon=126, n_paths=500, benchmark=_bench(), auto_events=False)
@@ -178,6 +190,20 @@ def test_publish_site_structure_and_alerts(tmp_path, monkeypatch):
 
 def test_build_alerts_empty_without_changes():
     assert build_alerts([]) == []
+
+
+def test_build_alerts_regime_once_per_symbol():
+    from types import SimpleNamespace as NS
+
+    from stk.publish import HorizonRun
+    from stk.watch import WatchItem
+
+    state = NS(names=["저변동(안정)", "중간 변동", "고변동(불안)"], current_regime=2, current=[0.0, 0.1, 0.9])
+    fc = NS(symbol="AAA", regime=NS(state=state), outlook=NS(label="횡보"), data_warnings=[])
+    ch = NS(outlook_changed=False, regime_changed=True, prev_regime="중간 변동")
+    runs = [HorizonRun(h, str(h), [WatchItem("AAA", fc, "a.html")], {"AAA": ch}) for h in (21, 126)]
+    alerts = build_alerts(runs)
+    assert alerts == ["AAA: '고변동(불안)' 국면 진입 (90%, 직전 중간 변동)"]
 
 
 def test_cli_publish(tmp_path, monkeypatch, capsys):
