@@ -10,6 +10,8 @@ import html
 import json
 import math
 import os
+import time
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
@@ -26,6 +28,7 @@ from .narrative import narrative_text
 from .report import DISCLAIMER, money, pct
 
 FLIP_MIN_DELTA = 0.02  # 흐름 판정이 바뀌었다고 표시할 최소 상승확률 변화
+STALE_RETRY_WAIT = 5.0  # 다른 종목보다 데이터가 늦은 종목을 다시 받기 전 대기 (초)
 
 DIRECTION = {
     2: ("▲▲", "up"),
@@ -77,6 +80,12 @@ def _forecast_one(symbol: str, opts: dict) -> WatchItem:
     try:
         prices = get_history(symbol, years=opts["years"], cache_dir=opts["cache_dir"], refresh=opts["refresh"])
         fc = run_forecast(prices, symbol, **opts["forecast"])
+        expect = opts.get("expect_date")
+        if expect is not None and fc.stats.last_date < expect:
+            lag = int(np.busday_count(fc.stats.last_date.date(), expect.date()))
+            fc.data_warnings.append(
+                f"다른 종목보다 데이터가 {lag}거래일 늦습니다 (마지막 {fc.stats.last_date:%Y-%m-%d}, 다른 종목 {expect:%Y-%m-%d}) "
+                "— 데이터 제공처 지연으로 이전 날짜 기준 예측입니다")
         out = Path(opts["out"])
         name = f"{symbol}_{fc.stats.last_date:%Y%m%d}_{fc.horizon}d.html"
         (out / name).write_text(render_html(fc, prices), encoding="utf-8")
@@ -116,7 +125,40 @@ def run_watchlist(
                     print(f"\r  예측 진행 {i}/{len(symbols)}", end="", flush=True)
     if progress:
         print()
+    _retry_stale(items, opts)
     return [items[s] for s in symbols]
+
+
+def reference_date(dates: list[pd.Timestamp]) -> pd.Timestamp | None:
+    """종목들의 마지막 데이터 날짜 중 가장 흔한 날짜 (3종목 미만이면 None)."""
+    if len(dates) < 3:
+        return None
+    (ref, _), = Counter(dates).most_common(1)
+    return ref
+
+
+def _retry_stale(items: dict[str, WatchItem], opts: dict) -> None:
+    """다른 종목보다 마지막 데이터가 이른 종목은 캐시 없이 한 번 더 받고, 그래도 늦으면 경고를 붙입니다."""
+    ref = reference_date([it.forecast.stats.last_date for it in items.values() if it.forecast is not None])
+    if ref is None:
+        return
+    stale = [s for s, it in items.items() if it.forecast is not None and it.forecast.stats.last_date < ref]
+    if not stale:
+        return
+    time.sleep(STALE_RETRY_WAIT)
+    retry_opts = dict(opts, refresh=True, expect_date=ref)
+    for sym in stale:
+        old = items[sym]
+        new = _forecast_one(sym, retry_opts)
+        if new.forecast is None:  # 재시도 자체가 실패 → 기존 결과에 경고만 추가
+            lag = int(np.busday_count(old.forecast.stats.last_date.date(), ref.date()))
+            old.forecast.data_warnings.append(
+                f"다른 종목보다 데이터가 {lag}거래일 늦습니다 (마지막 {old.forecast.stats.last_date:%Y-%m-%d}, "
+                f"다른 종목 {ref:%Y-%m-%d})")
+            continue
+        if old.report and old.report != new.report:
+            (Path(opts["out"]) / old.report).unlink(missing_ok=True)
+        items[sym] = new
 
 
 def compute_changes(items: list[WatchItem], records: list[dict]) -> dict[str, Change]:

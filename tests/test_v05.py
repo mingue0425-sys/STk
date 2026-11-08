@@ -219,3 +219,66 @@ def test_cli_publish(tmp_path, monkeypatch, capsys):
     assert "관심종목 흐름 예측" in step.read_text(encoding="utf-8")
     assert "사이트:" in capsys.readouterr().out
     assert main(["publish", "AAA", "--horizons", "xx", "--site", str(site)]) == 2
+
+
+# ---------------------------------------------------------------- 늦은 데이터 재시도 / 실행 상태
+def test_stale_symbol_is_refetched(tmp_path, monkeypatch):
+    full = {s: make_prices(n=600, seed=i) for i, s in enumerate(["AAA", "BBB", "CCC"])}
+    calls = []
+
+    def fake(sym, refresh=False, **kw):
+        calls.append((sym, refresh))
+        if sym == "CCC" and not refresh:
+            return full[sym].iloc[:-1]       # 처음엔 마지막 날 봉이 아직 없음
+        return full[sym]
+
+    monkeypatch.setattr(watch_mod, "get_history", fake)
+    monkeypatch.setattr(watch_mod, "STALE_RETRY_WAIT", 0.0)
+    items = watch_mod.run_watchlist(["AAA", "BBB", "CCC"], tmp_path, {"horizon": 21, "n_paths": 200}, jobs=1)
+    assert ("CCC", True) in calls and ("AAA", True) not in calls
+    last = {it.symbol: it.forecast.stats.last_date for it in items}
+    assert len(set(last.values())) == 1                        # 재시도로 따라잡음
+    assert not any("늦습니다" in w for it in items for w in it.forecast.data_warnings)
+    assert sorted(p.name for p in tmp_path.glob("CCC_*.html")) == [items[2].report]  # 오래된 리포트 삭제
+
+
+def test_stale_symbol_still_late_gets_warning(tmp_path, monkeypatch):
+    full = {s: make_prices(n=600, seed=i) for i, s in enumerate(["AAA", "BBB", "CCC"])}
+    monkeypatch.setattr(watch_mod, "get_history",
+                        lambda sym, **kw: full[sym].iloc[:-2] if sym == "CCC" else full[sym])
+    monkeypatch.setattr(watch_mod, "STALE_RETRY_WAIT", 0.0)
+    items = watch_mod.run_watchlist(["AAA", "BBB", "CCC"], tmp_path, {"horizon": 21, "n_paths": 200}, jobs=1)
+    ccc = items[2].forecast
+    assert any("2거래일 늦습니다" in w for w in ccc.data_warnings)
+    assert "늦습니다" in (tmp_path / items[2].report).read_text(encoding="utf-8")  # 개별 리포트에도 표시
+    assert watch_mod.reference_date([]) is None
+
+
+def test_publish_names_history_by_data_date(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    data = {"AAA": make_prices(seed=1)}
+    _fake_watch(monkeypatch, data)
+    site = tmp_path / "site"
+    publish_site(["AAA"], site, [21], {"n_paths": 200}, site / "data" / "f.jsonl", lambda s: data[s], jobs=1,
+                 generated=datetime(2031, 1, 4, 2, 0))   # 데이터 마지막 날보다 한참 뒤에 실행
+    last = data["AAA"].index[-1]
+    assert [p.name for p in (site / "history").glob("*.md")] == [f"{last:%Y-%m-%d}.md"]
+    page = (site / "history" / f"{last:%Y-%m-%d}.html").read_text(encoding="utf-8")
+    assert "<table>" in page and "AAA" in page and "AAA_" not in page          # 지난 리포트 링크는 글자만
+    assert f'href="{last:%Y-%m-%d}.html"' in (site / "history" / "index.html").read_text(encoding="utf-8")
+    assert 'href="history/index.html"' in (site / "index.html").read_text(encoding="utf-8")
+    status = json.loads((site / "data" / "latest.json").read_text(encoding="utf-8"))
+    assert status["as_of"] == f"{last:%Y-%m-%d}" and status["horizons"]["1m"] == {"ok": 1, "total": 1}
+    assert status["generated"].startswith("2031-01-04")
+
+
+def test_md_to_html_handles_summary_markdown():
+    from stk.publish import md_to_html
+
+    md = ("# 제목\n\n기준일 **2026-11-06** · 생성\n\n| 종목 | 값 |\n|---|---:|\n| [AAA](latest/1m/AAA_x.html) | 1 <b> |\n"
+          "\n## 알림\n\n- 하나\n- 둘\n\n---\n_면책_")
+    h = md_to_html(md)
+    assert "<h1>제목</h1>" in h and "<strong>2026-11-06</strong>" in h
+    assert "<th>종목</th>" in h and "<td>AAA</td>" in h and "&lt;b&gt;" in h and "---:" not in h
+    assert "<ul><li>하나</li><li>둘</li></ul>" in h and "<hr>" in h and "<em>면책</em>" in h

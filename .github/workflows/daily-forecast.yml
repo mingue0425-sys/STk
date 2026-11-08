@@ -106,7 +106,8 @@ jobs:
             echo "변경 없음"
             exit 0
           fi
-          git commit -q -m "Forecast $(date -u +%F) (${HORIZONS})"
+          AS_OF=$(python -c "import json; print(json.load(open('data/latest.json'))['as_of'])" 2>/dev/null || date -u +%F)
+          git commit -q -m "Forecast ${AS_OF} (${HORIZONS}, run $(date -u +%FT%H:%MZ))"
           git push origin "HEAD:$REPORTS_BRANCH"
 
       - name: Alert on flow changes (opt-in)

@@ -18,7 +18,7 @@
 - **백테스트**: 과거 시점마다 그때 데이터만으로 예측해 정확도·보정 상태를 검증, 모델 설정 비교
 - **리포트**: 콘솔 · 대화형 HTML · PNG 차트 · 마크다운 · JSON
 
-**공개 사이트: https://mingue0425-sys.github.io/STk/** (평일 매일 자동 갱신)
+**공개 사이트: https://mingue0425-sys.github.io/STk/** (평일 매일 자동 갱신 — GitHub 예약 실행 특성상 몇 시간 늦어질 수 있음)
 
 ![예시 차트](docs/example_chart.png)
 
@@ -153,7 +153,7 @@ python -m stk track --csv-out eval.csv
 | 워크플로 | 언제 | 하는 일 |
 |---|---|---|
 | `CI` (`.github/workflows/ci.yml`) | 코드 push · PR | Python 3.10~3.13 테스트 + ruff 린트 (네트워크 없이 합성 데이터) |
-| `Daily forecast` (`.github/workflows/daily-forecast.yml`) | 평일 22:17 UTC (한국 07:17) + 수동 실행 | `watchlist.txt` 종목을 1개월·6개월로 예측 → 사이트·기록을 `forecast-reports` 브랜치에 커밋 |
+| `Daily forecast` (`.github/workflows/daily-forecast.yml`) | 평일 22:17 UTC (한국 07:17, GitHub 혼잡 시 몇 시간 지연될 수 있음) + 수동 실행 | `watchlist.txt` 종목을 1개월·6개월로 예측 → 사이트·기록을 `forecast-reports` 브랜치에 커밋 |
 
 **Daily forecast 가 만드는 것** (`forecast-reports` 브랜치 — 코드 브랜치에는 아무것도 커밋하지 않습니다):
 
@@ -161,8 +161,9 @@ python -m stk track --csv-out eval.csv
 index.html             첫 화면: 기간별 요약 카드(상승/횡보/하락 종목 수, 흐름 변화, 실전 성과) → 기간별 대시보드로 이동
 README.md              기간별 요약표 (GitHub 에서 바로 보임)
 latest/1m/, latest/6m/ 기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
-history/YYYY-MM-DD.md  날짜별 요약 기록
+history/YYYY-MM-DD.md  날짜별 요약 기록 (파일 이름 = 데이터 기준일)
 data/forecasts.jsonl   누적 예측 기록 → 날짜가 지나면 자동으로 실제 주가와 비교 (실전 성과)
+data/latest.json       이번 실행 상태: 기준일 · 기간별 성공 종목 수 · 오류 · 데이터 경고 (점검용)
 alerts.md              흐름 변화·불안 국면 진입·데이터 경고가 있을 때만 생성
 ```
 

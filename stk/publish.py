@@ -6,14 +6,17 @@ site/
   index.html              첫 화면: 기간별 요약 카드 · 흐름 변화 · 실전 성과
   README.md               GitHub 에서 바로 보이는 요약
   latest/<1m|6m>/         기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
-  history/YYYY-MM-DD.md   날짜별 요약
+  history/YYYY-MM-DD.md   날짜별 요약 (파일 이름 = 데이터 기준일, 실행한 날 아님) + 같은 이름의 .html
+  history/index.html      지난 기록 목록 (GitHub Pages 는 폴더 목록을 보여 주지 않으므로 직접 생성)
   data/forecasts.jsonl    누적 예측 기록 (실전 성과 추적용)
+  data/latest.json        이번 실행 상태 (기준일 · 기간별 종목 수 · 오류 · 데이터 경고)
   alerts.md               흐름 변화·국면 급변·데이터 경고가 있을 때만 생성 (알림용)
 """
 
 from __future__ import annotations
 
 import html
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -143,7 +146,7 @@ def _landing(runs: list[HorizonRun], track: TrackResult | None, per_h: dict[int,
 </header>
 <div class="hgrid">{''.join(cards)}</div>
 <section class="card"><h2>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h2>{track_txt}</section>
-<p class="note">요약: <a href="README.md">README.md</a> · 지난 기록: <a href="history/">history/</a> · 예측 기록: <a href="data/forecasts.jsonl">data/forecasts.jsonl</a></p>
+<p class="note">지난 기록: <a href="history/index.html">날짜별 요약</a> · 예측 기록: <a href="data/forecasts.jsonl">forecasts.jsonl</a> · 실행 상태: <a href="data/latest.json">latest.json</a></p>
 <footer class="foot">{e(DISCLAIMER)}</footer>
 </main>
 </body>
@@ -159,6 +162,101 @@ LANDING_CSS = r"""
 .kpis.three{grid-template-columns:repeat(3,1fr);margin:6px 0 10px}
 .go{font-size:13px;font-weight:600;color:var(--s0)}
 """
+
+
+def md_to_html(md: str) -> str:
+    """이 프로그램이 만드는 요약 마크다운(제목·표·목록·굵게·링크)만 다루는 작은 변환기.
+
+    링크는 글자만 남깁니다 — 지난 날짜의 종목별 리포트 파일은 매일 새로 만들어져 남아 있지 않기 때문.
+    """
+
+    def inline(t: str) -> str:
+        t = html.escape(t, quote=False)
+        t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", t)
+        t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
+        return re.sub(r"^_(.+)_$", r"<em>\1</em>", t)
+
+    out: list[str] = []
+    rows: list[list[str]] = []
+    items: list[str] = []
+
+    def flush():
+        if rows:
+            head, body = rows[0], rows[1:]
+            out.append('<div class="tbl-wrap"><table><thead><tr>' + "".join(f"<th>{c}</th>" for c in head)
+                       + "</tr></thead><tbody>"
+                       + "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in body)
+                       + "</tbody></table></div>")
+            rows.clear()
+        if items:
+            out.append("<ul>" + "".join(f"<li>{i}</li>" for i in items) + "</ul>")
+            items.clear()
+
+    for raw in md.splitlines():
+        line = raw.strip()
+        if line.startswith("|"):
+            if items:
+                flush()
+            if not re.fullmatch(r"\|[\s:|-]+\|", line):
+                rows.append([inline(c.strip()) for c in line.strip("|").split("|")])
+            continue
+        if line.startswith("- "):
+            if rows:
+                flush()
+            items.append(inline(line[2:]))
+            continue
+        flush()
+        m = re.match(r"(#{1,3}) (.*)", line)
+        if m:
+            n = len(m.group(1))
+            out.append(f"<h{n}>{inline(m.group(2))}</h{n}>")
+        elif line == "---":
+            out.append("<hr>")
+        elif line:
+            out.append(f"<p>{inline(line)}</p>")
+    flush()
+    return "\n".join(out)
+
+
+def _history_page(title: str, body: str, back: str) -> str:
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)}</title>
+<style>{REPORT_CSS}{DASH_CSS}.hist h2{{margin-top:22px}}.hist ul.days li{{margin:4px 0}}</style>
+</head>
+<body>
+<main class="wrap hist">
+<p class="note">{back}</p>
+{body}
+<footer class="foot">{html.escape(DISCLAIMER)}</footer>
+</main>
+</body>
+</html>
+"""
+
+
+def write_history(site: Path) -> None:
+    """history/*.md 마다 .html 을 만들고(없거나 오래된 것만) 날짜 목록 index.html 을 다시 씁니다."""
+    hist = site / "history"
+    days = sorted(hist.glob("*.md"), reverse=True)
+    for md in days:
+        page = md.with_suffix(".html")
+        if page.exists() and page.stat().st_mtime >= md.stat().st_mtime:
+            continue
+        text = md.read_text(encoding="utf-8").replace(f"_{DISCLAIMER}_", "")
+        text = re.sub(r"\n첫 화면: .*\n", "\n", text)
+        text = re.sub(r" — \[대시보드\]\([^)]*\)", "", text)   # 지난 날짜 대시보드는 남아 있지 않음
+        body = md_to_html(text.replace("# 관심종목 흐름 예측", f"# 관심종목 흐름 예측 — {md.stem}", 1))
+        page.write_text(_history_page(f"흐름 예측 {md.stem}", body,
+                                      '<a href="index.html">← 지난 기록 목록</a> · <a href="../index.html">처음으로</a>'),
+                        encoding="utf-8")
+    links = "".join(f'<li><a href="{md.stem}.html">{md.stem}</a></li>' for md in days)
+    (hist / "index.html").write_text(
+        _history_page("지난 기록", f'<h1>지난 기록 <span class="h-sub">데이터 기준일별 요약</span></h1><ul class="days">{links}</ul>',
+                      '<a href="../index.html">← 처음으로</a>'), encoding="utf-8")
 
 
 def _prefix_links(md: str, prefix: str) -> str:
@@ -223,13 +321,26 @@ def publish_site(
                         + _prefix_links(body, f"latest/{run.code}/"))
 
     alerts = build_alerts(runs)
+    ok_dates = [it.forecast.stats.last_date for r in runs for it in r.ok]
+    as_of = max(ok_dates) if ok_dates else None
     (site / "index.html").write_text(_landing(runs, track, per_h, generated), encoding="utf-8")
     readme = "# 관심종목 흐름 예측\n\n" + "\n\n".join(md_parts)
     if alerts:
         readme += "\n\n## 알림\n\n" + "\n".join(f"- {a}" for a in alerts)
     readme += f"\n\n---\n첫 화면: [index.html](index.html) · 지난 요약: [history/](history/) · 예측 기록: [data/forecasts.jsonl](data/forecasts.jsonl)\n\n_{DISCLAIMER}_\n"
     (site / "README.md").write_text(readme, encoding="utf-8")
-    (site / "history" / f"{generated:%Y-%m-%d}.md").write_text(readme, encoding="utf-8")
+    day = as_of if as_of is not None else generated  # 지연 실행(예: 토요일 새벽)이어도 데이터 날짜로 저장
+    (site / "history" / f"{day:%Y-%m-%d}.md").write_text(readme, encoding="utf-8")
+    write_history(site)
+    status = {
+        "as_of": f"{day:%Y-%m-%d}",
+        "generated": generated.isoformat(timespec="seconds"),
+        "horizons": {r.code: {"ok": len(r.ok), "total": len(r.items)} for r in runs},
+        "errors": [it.error for it in (runs[0].items if runs else []) if it.error],
+        "data_warnings": [f"{it.symbol}: {w}" for it in (runs[0].ok if runs else []) for w in it.forecast.data_warnings],
+        "alerts": len(alerts),
+    }
+    (site / "data" / "latest.json").write_text(json.dumps(status, ensure_ascii=False, indent=1), encoding="utf-8")
     alert_file = site / "alerts.md"
     if alerts:
         alert_file.write_text(
