@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>흐름 예측 2026-11-06</title>
+<style>
+:root{color-scheme:light;
+--page:#f4f3ef;--surface:#fcfcfb;--text:#0b0b0b;--text2:#52514e;--muted:#7a7974;--grid:#e4e3df;--axis:#cfcec9;
+--band:#8a8984;--band90:.16;--band50:.30;
+--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;--s6:#6250d6;--s7:#e34948;
+--r0:#86b6ef;--r1:#2a78d6;--r2:#104281;--r0t:#0b0b0b;--r1t:#ffffff;--r2t:#ffffff;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+--page:#121211;--surface:#1a1a19;--text:#f0efec;--text2:#c3c2b7;--muted:#97968e;--grid:#2e2e2c;--axis:#3d3d3a;
+--band:#a3a29b;--band90:.14;--band50:.26;
+--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--s7:#e66767;
+--r0:#9ec5f4;--r1:#3987e5;--r2:#184f95;--r0t:#0b0b0b;--r1t:#0b0b0b;--r2t:#ffffff;}}
+:root[data-theme="dark"]{color-scheme:dark;
+--page:#121211;--surface:#1a1a19;--text:#f0efec;--text2:#c3c2b7;--muted:#97968e;--grid:#2e2e2c;--axis:#3d3d3a;
+--band:#a3a29b;--band90:.14;--band50:.26;
+--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--s7:#e66767;
+--r0:#9ec5f4;--r1:#3987e5;--r2:#184f95;--r0t:#0b0b0b;--r1t:#0b0b0b;--r2t:#ffffff;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);
+font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;
+font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:26px;margin:0;letter-spacing:-.01em}
+h2{font-size:16px;margin:0 0 12px}
+h3{font-size:14px;margin:16px 0 6px}
+.h-sub{font-size:.62em;font-weight:500;color:var(--text2);margin-left:6px}
+h2 .h-sub{font-size:12px}
+.meta{margin:4px 0 16px;color:var(--text2);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:18px 18px 14px;margin:0 0 16px}
+.hero{display:grid;grid-template-columns:minmax(220px,1fr) 2.4fr;gap:18px;align-items:center}
+.verdict-label,.kpi-label{font-size:12px;color:var(--text2)}
+.verdict-value{font-size:24px;font-weight:700;margin:2px 0 4px;letter-spacing:-.01em}
+.verdict-sub{color:var(--text2);font-size:13px}
+.narr{grid-column:1/-1;margin:4px 0 0;padding-top:12px;border-top:1px solid var(--grid);font-size:14px;line-height:1.7}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi{border:1px solid var(--grid);border-radius:10px;padding:10px 12px}
+.kpi-value{font-size:18px;font-weight:650;margin:2px 0;font-variant-numeric:tabular-nums;line-height:1.3}
+.kpi-sub{font-size:11.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid2>.card{margin:0 0 16px}
+.card,.hero>*,.grid2>*,.kpi{min-width:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 8px;margin:0 0 10px}
+.legend button,.legend span.item{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--grid);background:transparent;
+color:var(--text);border-radius:999px;padding:3px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.legend span.item{cursor:default}
+.legend button[aria-pressed="false"]{color:var(--muted);opacity:.55}
+.legend button:focus-visible{outline:2px solid var(--s0);outline-offset:1px}
+.key{display:inline-block;width:16px;height:0;border-top:2px solid currentColor}
+.key.dash{border-top-style:dashed}.key.dot{border-top-style:dotted}
+.key.area{height:10px;border:0;background:var(--band);opacity:.35;border-radius:2px}
+.chart-wrap{position:relative}
+.chart{display:block;width:100%;overflow:visible;outline:none}
+.chart:focus-visible{outline:2px solid var(--s0);outline-offset:4px;border-radius:4px}
+.chart text{fill:var(--text2);font-size:11px;font-variant-numeric:tabular-nums}
+.chart text.halo{fill:var(--text);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;font-weight:600}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--axis);border-radius:8px;
+padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:170px;z-index:5}
+.tip .t-date{font-weight:650;margin-bottom:4px}
+.tip .row{display:flex;align-items:center;gap:6px;justify-content:space-between;white-space:nowrap}
+.tip .row span:last-child{font-variant-numeric:tabular-nums}
+.tip .lbl{display:inline-flex;align-items:center;gap:6px;color:var(--text2)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.s0{background:var(--s0)}.s1{background:var(--s1)}.s2{background:var(--s2)}.s3{background:var(--s3)}
+.s4{background:var(--s4)}.s5{background:var(--s5)}.s6{background:var(--s6)}.s7{background:var(--s7)}
+.sr0{background:var(--r0)}.sr1{background:var(--r1)}.sr2{background:var(--r2)}
+.probs{display:flex;flex-direction:column;gap:10px}
+.prob-row{display:grid;grid-template-columns:110px 1fr 44px;gap:10px;align-items:center}
+.prob-name{font-size:13px}
+.prob-track{height:14px;background:transparent;border-radius:4px;position:relative}
+.prob-bar{height:14px;border-radius:0 4px 4px 0;min-width:2px}
+.prob-val{text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.prob-desc{grid-column:2/4;font-size:11.5px;color:var(--muted);margin-top:-6px}
+.flow{display:flex;flex-direction:column;gap:6px;margin:6px 0 8px}
+.flow-row{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center}
+.flow-label{font-size:12px;color:var(--text2)}
+.flow-bar{display:flex;gap:2px;height:22px}
+.seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-variant-numeric:tabular-nums;overflow:hidden}
+.seg:first-child{border-radius:4px 0 0 4px}.seg:last-child{border-radius:0 4px 4px 0}
+.seg.r0{background:var(--r0);color:var(--r0t)}.seg.r1{background:var(--r1);color:var(--r1t)}.seg.r2{background:var(--r2);color:var(--r2t)}
+.tbl-wrap{overflow-x:auto;margin:4px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
+th{font-weight:600;color:var(--text2);font-size:12px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:0}
+.note{font-size:12px;color:var(--muted);margin:8px 0 0}
+.lead{margin:0 0 6px;color:var(--text)}
+ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0;color:var(--text)}
+.foot{font-size:12px;color:var(--muted);margin-top:8px}
+.warn{margin:0 0 12px;padding:8px 12px;border:1px solid var(--axis);border-left:4px solid var(--s3);border-radius:8px;font-size:13px;background:var(--surface)}
+@media (max-width:860px){.hero{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+@media (max-width:420px){.kpis{grid-template-columns:1fr}.prob-row{grid-template-columns:88px 1fr 40px}h1{font-size:22px}}
+
+.wrap{max-width:1440px}
+.kpis.five{grid-template-columns:repeat(5,1fr)}
+#watch th button{all:unset;cursor:pointer;color:var(--text2);font-weight:600;font-size:12px}
+#watch th button:focus-visible{outline:2px solid var(--s0);outline-offset:2px}
+#watch th button[data-dir="asc"]::after{content:" ▲";font-size:9px}
+#watch th button[data-dir="desc"]::after{content:" ▼";font-size:9px}
+#watch td{vertical-align:middle}
+#watch td.sym a{color:var(--text);font-weight:650;text-decoration:none;border-bottom:1px solid var(--axis)}
+#watch td.sym a:hover{border-bottom-color:var(--text)}
+#watch tr.err td{color:var(--muted)}
+.dir{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.dw{cursor:help;color:var(--s3);font-size:12px}
+.delta{white-space:nowrap;cursor:help}.delta.up span{color:var(--s0)}.delta.down span{color:var(--s7)}.delta.flat span{color:var(--muted)}
+.muted{color:var(--muted)}
+.badge{display:inline-block;margin-left:6px;padding:0 6px;border:1px solid var(--axis);border-radius:999px;font-size:11px;color:var(--text2)}
+.kpi-value.small{font-size:15px}
+.sec{white-space:nowrap;cursor:help}
+.hnav{display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 16px}
+.hnav a{padding:4px 12px;border:1px solid var(--grid);border-radius:999px;color:var(--text2);text-decoration:none;font-size:13px}
+.hnav a[aria-current="page"]{background:var(--text);color:var(--surface);border-color:var(--text)}
+.dir.up span{color:var(--s0)}.dir.down span{color:var(--s7)}.dir.flat span{color:var(--muted)}
+.spark{display:block}
+.spark .b90{fill:var(--band);fill-opacity:var(--band90)}
+.spark .b50{fill:var(--band);fill-opacity:var(--band50)}
+.spark .hist{fill:none;stroke:var(--text);stroke-width:1.3}
+.spark .med{fill:none;stroke:var(--text);stroke-width:1.3;stroke-dasharray:3 2}
+.spark .now{stroke:var(--muted);stroke-width:1;stroke-dasharray:1 2}
+@media (max-width:860px){.kpis.five{grid-template-columns:repeat(2,1fr)}}
+.hist h2{margin-top:22px}.hist ul.days li{margin:4px 0}</style>
+</head>
+<body>
+<main class="wrap hist">
+<p class="note"><a href="index.html">← 지난 기록 목록</a> · <a href="../index.html">처음으로</a></p>
+<h1>관심종목 흐름 예측 — 2026-11-06</h1>
+<h2>1개월 전망 (21거래일)</h2>
+<p>기준일 <strong>2026-11-06</strong> · 생성 2026-11-08 15:47 · 시장 스트레스 +0.70 (공포/위기) · VIX 25.6</p>
+<div class="tbl-wrap"><table><thead><tr><th>종목</th><th>현재가</th><th>전체 흐름</th><th>상승확률</th><th>직전 대비</th><th>기대수익률</th><th>90% 범위</th><th>95% VaR</th><th>현재 국면</th><th>섹터</th><th>다음 실적(추정)</th></tr></thead><tbody><tr><td>AAPL</td><td>$342.37</td><td>■ 방향성 약한 횡보 흐름</td><td>52%</td><td>+1%p</td><td>+0.6%</td><td>$294.87 ~ $396.30</td><td>-13.9%</td><td>중간 변동 82%</td><td>XLY</td><td>-</td></tr><tr><td>MSFT</td><td>$530.61</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+1%p</td><td>+0.5%</td><td>$445.81 ~ $625.34</td><td>-16.0%</td><td>중간 변동 49%</td><td>XLK</td><td>-</td></tr><tr><td>GOOGL</td><td>$284.78</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>-0%p</td><td>+0.4%</td><td>$236.88 ~ $339.34</td><td>-16.8%</td><td>중간 변동 88%</td><td>XLC</td><td>-</td></tr><tr><td>AMZN</td><td>$259.30</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+1%p</td><td>+0.6%</td><td>$213.35 ~ $311.96</td><td>-17.7%</td><td>중간 변동 50%</td><td>XLY</td><td>-</td></tr><tr><td>META</td><td>$610.15</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>+1%p</td><td>+0.6%</td><td>$486.29 ~ $759.01</td><td>-20.3%</td><td>중간 변동 84%</td><td>XLC</td><td>-</td></tr><tr><td>NVDA</td><td>$186.64</td><td>■ 방향성 약한 횡보 흐름</td><td>49%</td><td>+1%p</td><td>+0.7%</td><td>$138.81 ~ $243.12</td><td>-25.6%</td><td>중간 변동 91%</td><td>XLK</td><td>11-23</td></tr><tr><td>AVGO</td><td>$293.69</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>+0%p</td><td>+0.9%</td><td>$224.77 ~ $375.07</td><td>-23.5%</td><td>고변동(불안) 52%</td><td>XLK</td><td>-</td></tr><tr><td>AMD</td><td>$449.04</td><td>■ 방향성 약한 횡보 흐름</td><td>48%</td><td>-1%p</td><td>+1.1%</td><td>$299.79 ~ $638.16</td><td>-33.2%</td><td>중간 변동 51%</td><td>XLK</td><td>-</td></tr><tr><td>TSLA</td><td>$358.22</td><td>■ 방향성 약한 횡보 흐름</td><td>49%</td><td>+1%p</td><td>+1.0%</td><td>$259.69 ~ $479.39</td><td>-27.5%</td><td>중간 변동 44%</td><td>XLY</td><td>-</td></tr><tr><td>NFLX</td><td>$63.41</td><td>■ 방향성 약한 횡보 흐름</td><td>49%</td><td>-1%p</td><td>+0.4%</td><td>$51.16 ~ $77.45</td><td>-19.3%</td><td>저변동(안정) 57%</td><td>XLC</td><td>-</td></tr><tr><td>V</td><td>$422.65</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+1%p</td><td>+0.3%</td><td>$367.06 ~ $482.35</td><td>-13.2%</td><td>중간 변동 45%</td><td>XLF</td><td>-</td></tr><tr><td>JPM</td><td>$334.49</td><td>■ 방향성 약한 횡보 흐름</td><td>52%</td><td>+0%p</td><td>+0.4%</td><td>$292.53 ~ $379.52</td><td>-12.5%</td><td>중간 변동 82%</td><td>XLF</td><td>-</td></tr><tr><td>BRK-B</td><td>$570.89</td><td>■ 방향성 약한 횡보 흐름</td><td>52%</td><td>+0%p</td><td>+0.5%</td><td>$516.88 ~ $631.76</td><td>-9.5%</td><td>중간 변동 77%</td><td>XLF</td><td>-</td></tr><tr><td>LLY</td><td>$1,354.00</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>+0%p</td><td>+0.3%</td><td>$1,143.51 ~ $1,587.23</td><td>-15.5%</td><td>중간 변동 91%</td><td>XLV</td><td>-</td></tr><tr><td>UNH</td><td>$394.15</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>+0%p</td><td>+0.3%</td><td>$336.45 ~ $457.51</td><td>-14.6%</td><td>중간 변동 92%</td><td>XLV</td><td>-</td></tr><tr><td>PFE</td><td>$29.39</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+0%p</td><td>+0.3%</td><td>$25.85 ~ $33.28</td><td>-12.0%</td><td>중간 변동 61%</td><td>XLV</td><td>-</td></tr><tr><td>COST</td><td>$1,053.56</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>+0%p</td><td>+0.1%</td><td>$939.95 ~ $1,175.94</td><td>-10.8%</td><td>중간 변동 82%</td><td>XLP</td><td>-</td></tr><tr><td>WMT</td><td>$125.52</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+0%p</td><td>+0.4%</td><td>$110.54 ~ $142.13</td><td>-11.9%</td><td>중간 변동 90%</td><td>XLP</td><td>11-17</td></tr><tr><td>KO</td><td>$95.67</td><td>■ 방향성 약한 횡보 흐름</td><td>53%</td><td>+0%p</td><td>+0.4%</td><td>$87.32 ~ $105.11</td><td>-8.7%</td><td>중간 변동 77%</td><td>XLP</td><td>-</td></tr><tr><td>XOM</td><td>$165.87</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>+1%p</td><td>+0.5%</td><td>$141.16 ~ $193.54</td><td>-14.9%</td><td>중간 변동 83%</td><td>XLE</td><td>-</td></tr></tbody></table></div>
+<h2>실전 성과 (기록된 예측 vs 실제)</h2>
+<p>기록 60건 · 평가 대기 120개 (체크포인트 날짜가 지나면 집계)</p>
+<h2>6개월 전망 (126거래일)</h2>
+<p>기준일 <strong>2026-11-06</strong> · 생성 2026-11-08 15:47 · 시장 스트레스 +0.70 (공포/위기) · VIX 25.6</p>
+<div class="tbl-wrap"><table><thead><tr><th>종목</th><th>현재가</th><th>전체 흐름</th><th>상승확률</th><th>직전 대비</th><th>기대수익률</th><th>90% 범위</th><th>95% VaR</th><th>현재 국면</th><th>섹터</th><th>다음 실적(추정)</th></tr></thead><tbody><tr><td>AAPL</td><td>$342.37</td><td>■ 방향성 약한 횡보 흐름</td><td>54%</td><td>-0%p</td><td>+3.7%</td><td>$241.44 ~ $487.07</td><td>-29.5%</td><td>중간 변동 82%</td><td>XLY</td><td>02-02</td></tr><tr><td>MSFT</td><td>$530.61</td><td>■ 방향성 약한 횡보 흐름</td><td>53%</td><td>+1%p</td><td>+3.2%</td><td>$361.15 ~ $767.24</td><td>-31.9%</td><td>중간 변동 49%</td><td>XLK</td><td>02-01</td></tr><tr><td>GOOGL</td><td>$284.78</td><td>■ 방향성 약한 횡보 흐름</td><td>53%</td><td>+0%p</td><td>+3.8%</td><td>$187.16 ~ $426.20</td><td>-34.3%</td><td>중간 변동 88%</td><td>XLC</td><td>02-05</td></tr><tr><td>AMZN</td><td>$259.30</td><td>■ 방향성 약한 횡보 흐름</td><td>53%</td><td>+0%p</td><td>+4.4%</td><td>$164.82 ~ $398.03</td><td>-36.4%</td><td>중간 변동 50%</td><td>XLY</td><td>02-05</td></tr><tr><td>META</td><td>$610.15</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+0%p</td><td>+4.3%</td><td>$353.95 ~ $990.52</td><td>-42.0%</td><td>중간 변동 84%</td><td>XLC</td><td>02-01</td></tr><tr><td>NVDA</td><td>$186.64</td><td>■ 방향성 약한 횡보 흐름</td><td>49%</td><td>+0%p</td><td>+5.4%</td><td>$95.92 ~ $334.70</td><td>-48.6%</td><td>중간 변동 91%</td><td>XLK</td><td>11-23</td></tr><tr><td>AVGO</td><td>$293.69</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+1%p</td><td>+5.9%</td><td>$165.73 ~ $508.72</td><td>-43.6%</td><td>고변동(불안) 52%</td><td>XLK</td><td>12-11</td></tr><tr><td>AMD</td><td>$449.04</td><td>■ 방향성 약한 횡보 흐름</td><td>47%</td><td>-0%p</td><td>+6.9%</td><td>$178.31 ~ $934.12</td><td>-60.3%</td><td>중간 변동 51%</td><td>XLK</td><td>02-03</td></tr><tr><td>TSLA</td><td>$358.22</td><td>■ 방향성 약한 횡보 흐름</td><td>48%</td><td>+0%p</td><td>+6.6%</td><td>$166.37 ~ $710.65</td><td>-53.6%</td><td>중간 변동 44%</td><td>XLY</td><td>01-28</td></tr><tr><td>NFLX</td><td>$63.41</td><td>■ 방향성 약한 횡보 흐름</td><td>49%</td><td>+0%p</td><td>+2.9%</td><td>$37.10 ~ $101.85</td><td>-41.5%</td><td>저변동(안정) 57%</td><td>XLC</td><td>01-22</td></tr><tr><td>V</td><td>$422.65</td><td>■ 방향성 약한 횡보 흐름</td><td>54%</td><td>+1%p</td><td>+2.7%</td><td>$310.45 ~ $574.31</td><td>-26.5%</td><td>중간 변동 45%</td><td>XLF</td><td>-</td></tr><tr><td>JPM</td><td>$334.49</td><td>▲ 완만한 상승 흐름</td><td>55%</td><td>+1%p</td><td>+3.6%</td><td>$243.33 ~ $465.06</td><td>-27.3%</td><td>중간 변동 82%</td><td>XLF</td><td>01-13</td></tr><tr><td>BRK-B</td><td>$570.89</td><td>▲ 완만한 상승 흐름</td><td>55%</td><td>+0%p</td><td>+2.6%</td><td>$454.66 ~ $729.87</td><td>-20.4%</td><td>중간 변동 77%</td><td>XLF</td><td>-</td></tr><tr><td>LLY</td><td>$1,354.00</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+0%p</td><td>+2.6%</td><td>$901.37 ~ $1,970.31</td><td>-33.4%</td><td>중간 변동 91%</td><td>XLV</td><td>02-05</td></tr><tr><td>UNH</td><td>$394.15</td><td>■ 방향성 약한 횡보 흐름</td><td>50%</td><td>+0%p</td><td>+1.9%</td><td>$257.20 ~ $569.93</td><td>-34.7%</td><td>중간 변동 92%</td><td>XLV</td><td>01-15</td></tr><tr><td>PFE</td><td>$29.39</td><td>■ 방향성 약한 횡보 흐름</td><td>52%</td><td>-1%p</td><td>+2.0%</td><td>$21.70 ~ $39.56</td><td>-26.2%</td><td>중간 변동 61%</td><td>XLV</td><td>-</td></tr><tr><td>COST</td><td>$1,053.56</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>-0%p</td><td>+1.5%</td><td>$796.03 ~ $1,377.76</td><td>-24.4%</td><td>중간 변동 82%</td><td>XLP</td><td>-</td></tr><tr><td>WMT</td><td>$125.52</td><td>■ 방향성 약한 횡보 흐름</td><td>53%</td><td>-0%p</td><td>+2.4%</td><td>$93.51 ~ $168.75</td><td>-25.5%</td><td>중간 변동 90%</td><td>XLP</td><td>11-17</td></tr><tr><td>KO</td><td>$95.67</td><td>■ 방향성 약한 횡보 흐름</td><td>54%</td><td>-1%p</td><td>+2.2%</td><td>$76.10 ~ $120.95</td><td>-20.5%</td><td>중간 변동 77%</td><td>XLP</td><td>-</td></tr><tr><td>XOM</td><td>$165.87</td><td>■ 방향성 약한 횡보 흐름</td><td>51%</td><td>+1%p</td><td>+2.4%</td><td>$112.65 ~ $237.82</td><td>-32.1%</td><td>중간 변동 83%</td><td>XLE</td><td>-</td></tr></tbody></table></div>
+<h2>실전 성과 (기록된 예측 vs 실제)</h2>
+<p>기록 60건 · 평가 대기 240개 (체크포인트 날짜가 지나면 집계)</p>
+<hr>
+<footer class="foot">※ 본 결과는 과거 가격 통계와 가정된 시나리오에 기반한 확률적 시뮬레이션이며, 실적·뉴스·거시 이벤트를 직접 반영하지 않습니다. 투자 권유가 아니며 투자 판단의 책임은 본인에게 있습니다.</footer>
+</main>
+</body>
+</html>
