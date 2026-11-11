@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WMT 주가 흐름 예측</title>
+<style>
+:root{color-scheme:light;
+--page:#f4f3ef;--surface:#fcfcfb;--text:#0b0b0b;--text2:#52514e;--muted:#7a7974;--grid:#e4e3df;--axis:#cfcec9;
+--band:#8a8984;--band90:.16;--band50:.30;
+--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;--s6:#6250d6;--s7:#e34948;
+--r0:#86b6ef;--r1:#2a78d6;--r2:#104281;--r0t:#0b0b0b;--r1t:#ffffff;--r2t:#ffffff;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+--page:#121211;--surface:#1a1a19;--text:#f0efec;--text2:#c3c2b7;--muted:#97968e;--grid:#2e2e2c;--axis:#3d3d3a;
+--band:#a3a29b;--band90:.14;--band50:.26;
+--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--s7:#e66767;
+--r0:#9ec5f4;--r1:#3987e5;--r2:#184f95;--r0t:#0b0b0b;--r1t:#0b0b0b;--r2t:#ffffff;}}
+:root[data-theme="dark"]{color-scheme:dark;
+--page:#121211;--surface:#1a1a19;--text:#f0efec;--text2:#c3c2b7;--muted:#97968e;--grid:#2e2e2c;--axis:#3d3d3a;
+--band:#a3a29b;--band90:.14;--band50:.26;
+--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--s7:#e66767;
+--r0:#9ec5f4;--r1:#3987e5;--r2:#184f95;--r0t:#0b0b0b;--r1t:#0b0b0b;--r2t:#ffffff;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);
+font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;
+font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:26px;margin:0;letter-spacing:-.01em}
+h2{font-size:16px;margin:0 0 12px}
+h3{font-size:14px;margin:16px 0 6px}
+.h-sub{font-size:.62em;font-weight:500;color:var(--text2);margin-left:6px}
+h2 .h-sub{font-size:12px}
+.meta{margin:4px 0 16px;color:var(--text2);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:18px 18px 14px;margin:0 0 16px}
+.hero{display:grid;grid-template-columns:minmax(220px,1fr) 2.4fr;gap:18px;align-items:center}
+.verdict-label,.kpi-label{font-size:12px;color:var(--text2)}
+.verdict-value{font-size:24px;font-weight:700;margin:2px 0 4px;letter-spacing:-.01em}
+.verdict-sub{color:var(--text2);font-size:13px}
+.narr{grid-column:1/-1;margin:4px 0 0;padding-top:12px;border-top:1px solid var(--grid);font-size:14px;line-height:1.7}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi{border:1px solid var(--grid);border-radius:10px;padding:10px 12px}
+.kpi-value{font-size:18px;font-weight:650;margin:2px 0;font-variant-numeric:tabular-nums;line-height:1.3}
+.kpi-sub{font-size:11.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid2>.card{margin:0 0 16px}
+.card,.hero>*,.grid2>*,.kpi{min-width:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 8px;margin:0 0 10px}
+.legend button,.legend span.item{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--grid);background:transparent;
+color:var(--text);border-radius:999px;padding:3px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.legend span.item{cursor:default}
+.legend button[aria-pressed="false"]{color:var(--muted);opacity:.55}
+.legend button:focus-visible{outline:2px solid var(--s0);outline-offset:1px}
+.key{display:inline-block;width:16px;height:0;border-top:2px solid currentColor}
+.key.dash{border-top-style:dashed}.key.dot{border-top-style:dotted}
+.key.area{height:10px;border:0;background:var(--band);opacity:.35;border-radius:2px}
+.chart-wrap{position:relative}
+.chart{display:block;width:100%;overflow:visible;outline:none}
+.chart:focus-visible{outline:2px solid var(--s0);outline-offset:4px;border-radius:4px}
+.chart text{fill:var(--text2);font-size:11px;font-variant-numeric:tabular-nums}
+.chart text.halo{fill:var(--text);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;font-weight:600}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--axis);border-radius:8px;
+padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:170px;z-index:5}
+.tip .t-date{font-weight:650;margin-bottom:4px}
+.tip .row{display:flex;align-items:center;gap:6px;justify-content:space-between;white-space:nowrap}
+.tip .row span:last-child{font-variant-numeric:tabular-nums}
+.tip .lbl{display:inline-flex;align-items:center;gap:6px;color:var(--text2)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.s0{background:var(--s0)}.s1{background:var(--s1)}.s2{background:var(--s2)}.s3{background:var(--s3)}
+.s4{background:var(--s4)}.s5{background:var(--s5)}.s6{background:var(--s6)}.s7{background:var(--s7)}
+.sr0{background:var(--r0)}.sr1{background:var(--r1)}.sr2{background:var(--r2)}
+.probs{display:flex;flex-direction:column;gap:10px}
+.prob-row{display:grid;grid-template-columns:110px 1fr 44px;gap:10px;align-items:center}
+.prob-name{font-size:13px}
+.prob-track{height:14px;background:transparent;border-radius:4px;position:relative}
+.prob-bar{height:14px;border-radius:0 4px 4px 0;min-width:2px}
+.prob-val{text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.prob-desc{grid-column:2/4;font-size:11.5px;color:var(--muted);margin-top:-6px}
+.flow{display:flex;flex-direction:column;gap:6px;margin:6px 0 8px}
+.flow-row{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center}
+.flow-label{font-size:12px;color:var(--text2)}
+.flow-bar{display:flex;gap:2px;height:22px}
+.seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-variant-numeric:tabular-nums;overflow:hidden}
+.seg:first-child{border-radius:4px 0 0 4px}.seg:last-child{border-radius:0 4px 4px 0}
+.seg.r0{background:var(--r0);color:var(--r0t)}.seg.r1{background:var(--r1);color:var(--r1t)}.seg.r2{background:var(--r2);color:var(--r2t)}
+.tbl-wrap{overflow-x:auto;margin:4px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
+th{font-weight:600;color:var(--text2);font-size:12px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:0}
+.note{font-size:12px;color:var(--muted);margin:8px 0 0}
+.lead{margin:0 0 6px;color:var(--text)}
+ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0;color:var(--text)}
+.foot{font-size:12px;color:var(--muted);margin-top:8px}
+.warn{margin:0 0 12px;padding:8px 12px;border:1px solid var(--axis);border-left:4px solid var(--s3);border-radius:8px;font-size:13px;background:var(--surface)}
+@media (max-width:860px){.hero{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+@media (max-width:420px){.kpis{grid-template-columns:1fr}.prob-row{grid-template-columns:88px 1fr 40px}h1{font-size:22px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header class="top">
+  <div>
+    <h1>WMT <span class="h-sub">시나리오별 주가 흐름 예측</span></h1>
+    <p class="meta">기준일 2026-11-10 · 현재가 $125.55 · 21거래일 예측 (~2026-12-10) · 앙상블 (시나리오 모델 30% + 국면 모델 70%)</p>
+  </div>
+</header>
+
+
+<section class="card hero">
+  <div class="verdict">
+    <div class="verdict-label">전체 흐름</div>
+    <div class="verdict-value">방향성 약한 횡보 흐름</div>
+    <div class="verdict-sub">현재가 부근에서 등락하는 경로 · 최유력 시나리오: 기본</div>
+  </div>
+  <div class="kpis"><div class="kpi"><div class="kpi-label">상승 마감 확률</div><div class="kpi-value">52%</div><div class="kpi-sub">2026-12-10 기준</div></div><div class="kpi"><div class="kpi-label">기대수익률</div><div class="kpi-value">+0.5%</div><div class="kpi-sub">중앙값 +0.3%</div></div><div class="kpi"><div class="kpi-label">90% 가격 범위</div><div class="kpi-value">$111.54 ~ $141.38</div><div class="kpi-sub">높음 (90% 구간 폭 24%)</div></div><div class="kpi"><div class="kpi-label">기간 중 ±20% 도달</div><div class="kpi-value">2% / 1%</div><div class="kpi-sub">+20% 이상 / −20% 이하</div></div></div>
+  <p class="narr">WMT의 향후 1개월 흐름은 &#x27;방향성 약한 횡보 흐름&#x27;으로 보입니다. 상승 마감 확률 52%, 기대수익률 +0.5%이며 현재가 부근에서 등락하는 흐름이 중심 시나리오입니다. 오르내릴 방향보다는 움직일 수 있는 폭에 무게를 두고 보는 것이 좋습니다. 1개월 뒤 주가는 90% 확률로 $111.54~$141.38 사이로 예상되며, 변동성 수준은 &#x27;높음&#x27;입니다. 나쁜 5% 경우의 평균 손실은 약 15%입니다. 현재 &#x27;중간 변동&#x27; 국면일 가능성이 76%이며, 1개월 뒤에는 안정 국면 확률 47%, 불안 국면 확률 5%로 예상됩니다. 시장 전체는 &#x27;불안&#x27; 상태(VIX 19.5)로, 급락·조정 시나리오의 확률을 평소보다 높게 반영했습니다. 다음 실적 발표는 11월 17일 전후(±2거래일)로 추정됩니다. 과거 실적 반응일의 하루 변동이 ±6% 안팎이었으니 그 무렵 급등락에 유의하세요. 필수소비재 섹터(XLP)와 강하게 함께 움직이며, 주가 변동은 시장 14% · 섹터 34% · 종목 고유 52%로 나뉩니다. 최근 3개월은 섹터보다 1%p 강했습니다.</p>
+</section>
+
+<section class="card">
+  <h2>가격 경로 <span class="h-sub">최근 1년 실제 주가 + 예측 분포</span></h2>
+  <div id="fan-legend" class="legend" role="group" aria-label="계열 표시 전환"></div>
+  <div class="chart-wrap" id="fan-wrap">
+    <svg id="fan" class="chart" tabindex="0" role="img" aria-label="WMT 가격 경로 팬 차트"></svg>
+    <div class="tip" id="fan-tip" hidden></div>
+  </div>
+  <p class="note">음영: 전체(확률가중) 분포의 50%·90% 구간 · 선: 각 시나리오의 중앙값 경로. 차트 위에서 마우스(또는 ←/→ 키)로 날짜별 값을 확인하세요.</p>
+</section>
+
+<div class="grid2">
+<section class="card">
+  <h2>시나리오 확률</h2>
+  <div id="probs" class="probs"></div>
+</section>
+<section class="card">
+  <h2>만기 수익률 분포 <span class="h-sub">확률 가중</span></h2>
+  <div class="chart-wrap" id="dist-wrap">
+    <svg id="dist" class="chart" role="img" aria-label="만기 수익률 분포"></svg>
+    <div class="tip" id="dist-tip" hidden></div>
+  </div>
+</section>
+</div>
+
+
+<section class="card">
+  <h2>위험 지표</h2>
+  <ul class="plain"><li>95% VaR -11.2% (5% 확률로 이보다 큰 손실)  |  CVaR -15.0% (최악 5% 평균)</li><li>만기 손실 10% 이상 확률 7% · 20% 이상 1%  |  경로 중 최대낙폭 중앙값 -5.4% · 나쁜 5% -14.1%</li></ul>
+  
+</section>
+<section class="card">
+  <h2>시나리오별 결과</h2>
+  <div class="tbl-wrap"><table><thead><tr><th class="">시나리오</th><th class="num">확률</th><th class="num">연 기대수익률</th><th class="num">기대가격</th><th class="num">중앙값</th><th class="num">5%~95% 범위</th><th class="num">상승확률</th><th class="num">중앙 MDD</th></tr></thead><tbody><tr><td class=""><span class="sw s0"></span>강세 지속</td><td class="num">24%</td><td class="num">+18.5%</td><td class="num">$127.49 (+2%)</td><td class="num">$127.13</td><td class="num">$113.07 ~ $142.60</td><td class="num">57%</td><td class="num">-5%</td></tr><tr><td class=""><span class="sw s1"></span>기본</td><td class="num">39%</td><td class="num">+6.0%</td><td class="num">$126.06 (+0%)</td><td class="num">$125.63</td><td class="num">$110.67 ~ $142.79</td><td class="num">50%</td><td class="num">-6%</td></tr><tr><td class=""><span class="sw s2"></span>약세 전환</td><td class="num">21%</td><td class="num">-12.7%</td><td class="num">$124.13 (-1%)</td><td class="num">$123.55</td><td class="num">$105.16 ~ $144.76</td><td class="num">44%</td><td class="num">-8%</td></tr><tr><td class=""><span class="sw s3"></span>조정 후 반등</td><td class="num">11%</td><td class="num">+4.9%</td><td class="num">$126.12 (+0%)</td><td class="num">$125.64</td><td class="num">$108.13 ~ $146.29</td><td class="num">50%</td><td class="num">-7%</td></tr><tr><td class=""><span class="sw s4"></span>급락 충격</td><td class="num">6%</td><td class="num">-29.2%</td><td class="num">$122.73 (-2%)</td><td class="num">$121.97</td><td class="num">$98.07 ~ $150.52</td><td class="num">41%</td><td class="num">-11%</td></tr><tr><td class=""><span class="sw s5"></span>국면 모델(HMM)</td><td class="num">70%</td><td class="num">+4.7%</td><td class="num">$126.26 (+1%)</td><td class="num">$126.08</td><td class="num">$113.22 ~ $140.25</td><td class="num">53%</td><td class="num">-5%</td></tr><tr><td class="">확률가중 전체</td><td class="num">100%</td><td class="num"></td><td class="num">$126.13 (+0%)</td><td class="num">$125.98</td><td class="num">$111.54 ~ $141.38</td><td class="num">52%</td><td class="num"></td></tr></tbody></table></div><p class="note">시나리오 확률은 시나리오 모델 내부 비중입니다. 전체 분포 = 시나리오 모델 30% + 국면 모델 70%</p>
+</section>
+
+<section class="card">
+  <h2>기간별 흐름 <span class="h-sub">중앙값 가격 경로</span></h2>
+  <div class="tbl-wrap"><table><thead><tr><th class="">기간</th><th class="">날짜</th><th class="num">강세 지속</th><th class="num">기본</th><th class="num">약세 전환</th><th class="num">조정 후 반등</th><th class="num">급락 충격</th><th class="num">국면 모델</th><th class="num">전체 중앙값</th><th class="num">전체 25~75%</th></tr></thead><tbody><tr><td class="">1주</td><td class="">2026-11-17</td><td class="num">$125.94</td><td class="num">$125.60</td><td class="num">$125.00</td><td class="num">$124.66</td><td class="num">$124.79</td><td class="num">$125.73</td><td class="num">$125.66 (+0%)</td><td class="num">$123.12 ~ $128.19</td></tr><tr><td class="">1개월</td><td class="">2026-12-10</td><td class="num">$127.13</td><td class="num">$125.63</td><td class="num">$123.55</td><td class="num">$125.64</td><td class="num">$121.97</td><td class="num">$126.08</td><td class="num">$125.98 (+0%)</td><td class="num">$120.45 ~ $131.42</td></tr></tbody></table></div>
+</section>
+
+<section class="card">
+  <h2>국면 흐름 <span class="h-sub">은닉 마르코프 모델 · 데이터 기반</span></h2>
+  <p class="lead">현재 &#x27;중간 변동&#x27; 국면일 확률 76% (평균 지속 15거래일) → 1개월 후 저변동(안정) 47% · 중간 변동 48% · 고변동(불안) 5%</p>
+  <div id="regime-flow" class="flow" role="img" aria-label="기간별 국면 확률"></div>
+  <div id="regime-legend" class="legend static"></div>
+  <div class="tbl-wrap"><table><thead><tr><th class="">국면</th><th class="num">연 기대수익률</th><th class="num">연 변동성</th><th class="num">평균 지속</th><th class="num">장기 비중</th><th class="num">현재 확률</th></tr></thead><tbody><tr><td class=""><span class="sw sr0"></span>저변동(안정)</td><td class="num">+8.0%</td><td class="num">12%</td><td class="num">25일</td><td class="num">53%</td><td class="num">23%</td></tr><tr><td class=""><span class="sw sr1"></span>중간 변동</td><td class="num">+3.6%</td><td class="num">21%</td><td class="num">15일</td><td class="num">43%</td><td class="num">76%</td></tr><tr><td class=""><span class="sw sr2"></span>고변동(불안)</td><td class="num">+6.0%</td><td class="num">71%</td><td class="num">2일</td><td class="num">5%</td><td class="num">1%</td></tr></tbody></table></div>
+  <p class="note">국면별 기대수익률은 표본 차이를 추정 정밀도만큼 축소한 뒤 기본 기대수익률에 맞춘 값입니다.</p>
+</section>
+<div class="grid2">
+<section class="card">
+  <h2>현재 상태 진단</h2>
+  <div class="tbl-wrap"><table><thead><tr><th class="">지표</th><th class="">값</th></tr></thead><tbody><tr><td class="">추세 점수</td><td class="">+0.06 (중립/횡보, 참고용 · 확률에 미반영)</td></tr><tr><td class="">이동평균 20 / 50 / 200일</td><td class="">$121.88 / $113.35 / $118.45</td></tr><tr><td class="">RSI(14)</td><td class="">63</td></tr><tr><td class="">1년 수익률 / 12-1 모멘텀</td><td class="">+23.4% / +11.2%</td></tr><tr><td class="">52주 고점 대비</td><td class="">-6.2%</td></tr><tr><td class="">변동성 현재(EWMA) / 1년 / 장기</td><td class="">27.4% / 27.0% / 22.8%</td></tr><tr><td class="">베타 (vs S&amp;P500)</td><td class="">0.38</td></tr><tr><td class="">꼬리 두께 (t 자유도)</td><td class="">4.3</td></tr><tr><td class="">기본 기대수익률</td><td class="">기본 +6.0% = CAPM +6.0% (rf 4.1% + β 0.38 × ERP 5.0%), 추세 미반영</td></tr><tr><td class="">시나리오 폭</td><td class="">±12.5%</td></tr></tbody></table></div>
+</section>
+<section class="card">
+  <h2>시장 환경</h2>
+  <ul class="plain"><li>시장 스트레스 +0.22 (불안)  |  VIX 19.5 (5년 백분위 64%)  |  VIX/VIX3M 0.94 (정상(우상향))  |  S&amp;P500 고점 대비 -3.7%  |  S&amp;P500 추세 +0.43</li><li>변동성 반영  과거 EWMA 27.4% + VIX 기반 선행 27.2% → 출발 변동성 27.3% (장기 25.0%로 회귀)</li></ul>
+  <h3>섹터</h3><ul class='plain'><li>섹터 필수소비재(XLP)  |  연관도 0.60</li><li>위험 분해  시장 14% · 섹터 34% · 종목 고유 52%  (β 시장 0.60, 섹터 1.05)</li><li>섹터 대비 상대 수익률  3개월 +0.8% · 6개월 -12.7%  |  섹터 3개월 +7.7% · 섹터 추세 상승 추세</li></ul>
+  
+</section>
+</div>
+
+<footer class="foot">※ 본 결과는 과거 가격 통계와 가정된 시나리오에 기반한 확률적 시뮬레이션이며, 실적·뉴스·거시 이벤트를 직접 반영하지 않습니다. 투자 권유가 아니며 투자 판단의 책임은 본인에게 있습니다.</footer>
+</main>
+<script id="data" type="application/json">{"symbol":"WMT","s0":125.55000305175781,"hist":{"dates":["2025-11-10","2025-11-11","2025-11-12","2025-11-13","2025-11-14","2025-11-17","2025-11-18","2025-11-19","2025-11-20","2025-11-21","2025-11-24","2025-11-25","2025-11-26","2025-11-28","2025-12-01","2025-12-02","2025-12-03","2025-12-04","2025-12-05","2025-12-08","2025-12-09","2025-12-10","2025-12-11","2025-12-12","2025-12-15","2025-12-16","2025-12-17","2025-12-18","2025-12-19","2025-12-22","2025-12-23","2025-12-24","2025-12-26","2025-12-29","2025-12-30","2025-12-31","2026-01-02","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-12","2026-01-13","2026-01-14","2026-01-15","2026-01-16","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-02-02","2026-02-03","2026-02-04","2026-02-05","2026-02-06","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-17","2026-02-18","2026-02-19","2026-02-20","2026-02-23","2026-02-24","2026-02-25","2026-02-26","2026-02-27","2026-03-02","2026-03-03","2026-03-04","2026-03-05","2026-03-06","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-30","2026-03-31","2026-04-01","2026-04-02","2026-04-06","2026-04-07","2026-04-08","2026-04-09","2026-04-10","2026-04-13","2026-04-14","2026-04-15","2026-04-16","2026-04-17","2026-04-20","2026-04-21","2026-04-22","2026-04-23","2026-04-24","2026-04-27","2026-04-28","2026-04-29","2026-04-30","2026-05-01","2026-05-04","2026-05-05","2026-05-06","2026-05-07","2026-05-08","2026-05-11","2026-05-12","2026-05-13","2026-05-14","2026-05-15","2026-05-18","2026-05-19","2026-05-20","2026-05-21","2026-05-22","2026-05-26","2026-05-27","2026-05-28","2026-05-29","2026-06-01","2026-06-02","2026-06-03","2026-06-04","2026-06-05","2026-06-08","2026-06-09","2026-06-10","2026-06-11","2026-06-12","2026-06-15","2026-06-16","2026-06-17","2026-06-18","2026-06-22","2026-06-23","2026-06-24","2026-06-25","2026-06-26","2026-06-29","2026-06-30","2026-07-01","2026-07-02","2026-07-06","2026-07-07","2026-07-08","2026-07-09","2026-07-10","2026-07-13","2026-07-14","2026-07-15","2026-07-16","2026-07-17","2026-07-20","2026-07-21","2026-07-22","2026-07-23","2026-07-24","2026-07-27","2026-07-28","2026-07-29","2026-07-30","2026-07-31","2026-08-03","2026-08-04","2026-08-05","2026-08-06","2026-08-07","2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14","2026-08-17","2026-08-18","2026-08-19","2026-08-20","2026-08-21","2026-08-24","2026-08-25","2026-08-26","2026-08-27","2026-08-28","2026-08-31","2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-14","2026-09-15","2026-09-16","2026-09-17","2026-09-18","2026-09-21","2026-09-22","2026-09-23","2026-09-24","2026-09-25","2026-09-28","2026-09-29","2026-09-30","2026-10-01","2026-10-02","2026-10-05","2026-10-06","2026-10-07","2026-10-08","2026-10-09","2026-10-12","2026-10-13","2026-10-14","2026-10-15","2026-10-16","2026-10-19","2026-10-20","2026-10-21","2026-10-22","2026-10-23","2026-10-26","2026-10-27","2026-10-28","2026-10-29","2026-10-30","2026-11-02","2026-11-03","2026-11-04","2026-11-05","2026-11-06","2026-11-09","2026-11-10"],"prices":[101.56,102.58,102.58,101.68,101.62,102.09,100.54,99.77,106.22,104.44,103.19,106.11,108.19,109.59,110.6,111.47,113.45,113.88,114.15,112.61,114.1,112.24,114.56,115.96,116.05,114.69,114.93,114.1,113.64,111.89,110.2,110.9,111.03,111.82,111.21,110.71,112.05,112.0,113.62,112.01,112.35,113.81,117.22,119.6,119.28,118.45,118.94,117.96,118.6,117.08,116.99,116.9,116.2,115.83,116.67,118.39,123.27,126.9,127.19,126.14,130.35,128.2,125.9,127.96,132.79,133.04,128.03,125.82,124.08,122.21,125.01,125.95,124.95,123.63,127.14,126.3,127.1,127.0,122.53,123.02,123.55,124.33,122.71,124.54,125.72,125.19,124.29,121.21,120.32,118.51,120.2,121.53,122.53,121.66,122.36,122.97,123.75,124.21,125.25,126.25,121.96,126.71,128.58,126.23,124.04,124.51,124.22,124.28,126.95,127.37,129.04,129.42,131.46,129.36,127.04,127.04,127.46,131.36,131.04,129.77,130.23,129.52,129.64,130.12,127.29,130.04,131.16,132.14,131.14,133.02,133.88,130.54,121.05,119.98,118.29,118.26,118.62,115.47,114.33,112.79,116.61,117.46,118.6,119.54,118.6,120.3,120.21,120.75,120.53,120.74,117.85,116.9,116.9,119.13,118.72,115.5,115.41,114.33,112.99,108.56,111.57,110.39,111.27,112.83,111.94,113.63,114.51,113.43,112.26,114.68,113.97,111.93,110.13,109.07,108.14,109.21,111.47,112.83,113.95,110.83,110.93,110.45,111.28,112.07,111.8,111.58,112.39,112.99,115.73,115.44,114.99,114.06,114.92,114.03,103.59,103.7,106.49,105.38,104.34,102.63,103.09,104.87,105.92,106.09,108.42,107.14,106.05,105.83,105.73,107.15,109.08,108.09,107.5,106.79,106.73,107.44,110.12,110.53,107.59,107.98,108.73,106.8,103.92,104.26,104.26,105.07,107.2,108.16,110.56,111.35,113.08,112.28,116.16,117.87,118.81,118.7,117.85,117.8,121.12,119.89,120.29,119.32,118.77,121.25,123.51,127.69,124.86,129.17,127.72,125.52,125.66,125.55]},"fut":{"dates":["2026-11-10","2026-11-11","2026-11-12","2026-11-13","2026-11-16","2026-11-17","2026-11-18","2026-11-19","2026-11-20","2026-11-23","2026-11-24","2026-11-25","2026-11-27","2026-11-30","2026-12-01","2026-12-02","2026-12-03","2026-12-04","2026-12-07","2026-12-08","2026-12-09","2026-12-10"],"bands":{"p5":[125.55,122.67,121.31,120.12,119.14,118.6,117.92,117.19,116.72,116.18,115.67,115.3,114.88,114.6,114.12,113.69,113.34,113.05,112.45,112.12,111.93,111.54],"p25":[125.55,124.51,124.05,123.72,123.45,123.12,122.84,122.53,122.35,122.2,122.07,121.88,121.71,121.63,121.37,121.28,121.17,120.97,120.81,120.7,120.56,120.45],"p50":[125.55,125.58,125.6,125.65,125.63,125.66,125.73,125.65,125.67,125.66,125.62,125.73,125.85,125.82,125.84,125.86,125.89,125.92,126.03,125.95,125.95,125.98],"p75":[125.55,126.63,127.16,127.61,127.9,128.19,128.47,128.69,128.91,129.23,129.41,129.63,129.81,130.04,130.22,130.47,130.74,130.77,130.99,131.17,131.27,131.42],"p95":[125.55,128.56,130.06,131.25,132.24,133.25,134.03,134.69,135.53,136.04,136.56,137.17,137.69,138.07,138.47,138.86,139.41,139.94,140.48,140.85,141.1,141.38]},"lines":[{"key":"bull","name":"강세 지속","slot":0,"dash":"","values":[125.55,125.71,125.74,125.8,125.89,125.94,126.06,126.09,126.19,126.32,126.5,126.53,126.66,126.64,126.79,126.78,126.86,126.9,127.04,126.98,127.02,127.13],"note":"24%"},{"key":"base","name":"기본","slot":1,"dash":"","values":[125.55,125.55,125.6,125.5,125.68,125.6,125.64,125.55,125.6,125.55,125.52,125.67,125.7,125.66,125.56,125.61,125.68,125.69,125.6,125.7,125.69,125.63],"note":"39%"},{"key":"bear","name":"약세 전환","slot":2,"dash":"","values":[125.55,125.47,125.28,125.22,125.07,125.0,124.86,124.78,124.69,124.68,124.54,124.37,124.27,124.14,124.04,124.03,123.95,123.85,123.62,123.72,123.52,123.55],"note":"21%"},{"key":"dip_recovery","name":"조정 후 반등","slot":3,"dash":"","values":[125.55,125.37,125.1,124.99,124.81,124.66,124.55,124.39,124.49,124.69,124.75,124.87,124.85,124.96,125.05,125.03,125.14,125.16,125.21,125.46,125.49,125.64],"note":"11%"},{"key":"crash","name":"급락 충격","slot":4,"dash":"","values":[125.55,125.47,125.35,125.21,125.02,124.79,124.78,124.41,124.23,123.89,123.79,123.57,123.55,123.14,123.05,122.87,122.55,122.57,122.36,122.24,122.03,121.97],"note":"6%"},{"key":"regime","name":"국면 모델","slot":5,"dash":"2 3","values":[125.55,125.59,125.63,125.7,125.65,125.73,125.8,125.69,125.73,125.71,125.68,125.79,125.94,125.88,125.95,126.0,126.03,126.03,126.15,126.06,126.01,126.08],"note":"비중 70%"}]},"events":[],"levels":[],"dist":{"bins":[-0.2592,-0.2503,-0.2414,-0.2324,-0.2235,-0.2146,-0.2056,-0.1967,-0.1878,-0.1789,-0.1699,-0.161,-0.1521,-0.1431,-0.1342,-0.1253,-0.1163,-0.1074,-0.0985,-0.0896,-0.0806,-0.0717,-0.0628,-0.0538,-0.0449,-0.036,-0.027,-0.0181,-0.0092,-0.0003,0.0087,0.0176,0.0265,0.0355,0.0444,0.0533,0.0623,0.0712,0.0801,0.089,0.098,0.1069,0.1158,0.1248,0.1337,0.1426,0.1515,0.1605,0.1694,0.1783,0.1873,0.1962,0.2051,0.2141,0.223,0.2319,0.2408,0.2498,0.2587,0.2676,0.2766],"groups":[{"name":"강세 지속","slot":0,"dash":"","mass":[0.0,2e-05,2e-05,0.0,0.0,0.0,5e-05,7e-05,5e-05,9e-05,9e-05,0.00014,0.00027,0.00044,0.00034,0.00034,0.00068,0.00096,0.00101,0.00105,0.00171,0.00158,0.00219,0.00238,0.00293,0.0034,0.00373,0.00334,0.00375,0.00316,0.00361,0.00366,0.00306,0.00341,0.00308,0.00286,0.00258,0.00236,0.00181,0.00203,0.00178,0.00142,0.00096,0.00085,0.00076,0.00057,0.00062,0.00043,0.00027,0.0002,0.00021,0.00018,9e-05,0.00011,7e-05,0.00012,0.0,2e-05,0.0,2e-05]},{"name":"기본","slot":1,"dash":"","mass":[0.0,0.0,6e-05,3e-05,9e-05,6e-05,0.00015,0.00018,0.00015,0.00041,0.00047,0.00044,0.00068,0.00118,0.00107,0.00124,0.00145,0.00255,0.00278,0.00234,0.0032,0.00352,0.00471,0.00438,0.0058,0.00527,0.00512,0.0053,0.00604,0.00533,0.00545,0.00482,0.00553,0.00482,0.00435,0.00408,0.00346,0.00317,0.00284,0.00222,0.00255,0.00195,0.0016,0.00118,0.00083,0.00109,0.00101,0.00092,0.00059,0.00036,0.00027,0.00027,0.00015,0.00015,6e-05,0.00012,0.00012,0.00012,6e-05,0.00012]},{"name":"약세 전환","slot":2,"dash":"","mass":[8e-05,6e-05,0.00014,0.00015,0.00022,0.0002,0.00035,0.00038,0.00034,0.00042,0.00063,0.00085,0.00072,0.00103,0.00108,0.00162,0.0012,0.00146,0.00152,0.00191,0.002,0.00208,0.00212,0.00239,0.00226,0.00266,0.00208,0.00212,0.00234,0.00186,0.00225,0.00219,0.00211,0.00208,0.00177,0.00182,0.00148,0.00135,0.00112,0.00111,0.00094,0.00099,0.00088,0.00077,0.00055,0.00051,0.00037,0.00045,0.00045,0.0002,0.00018,0.0002,0.0002,0.00015,0.00017,0.00014,0.0002,5e-05,8e-05,5e-05]},{"name":"조정 후 반등","slot":3,"dash":"","mass":[2e-05,1e-05,2e-05,2e-05,4e-05,5e-05,0.0001,0.00011,0.0001,0.00016,0.00019,0.00023,0.00028,0.00046,0.00035,0.00054,0.00054,0.0007,0.00084,0.0008,0.0009,0.00092,0.00083,0.00111,0.00133,0.00131,0.00117,0.00143,0.00129,0.00131,0.00133,0.00135,0.00113,0.00101,0.00101,0.00087,0.00103,0.0009,0.00082,0.00066,0.00057,0.00062,0.0005,0.00038,0.00032,0.00037,0.00026,0.00025,0.00026,0.00026,0.00017,0.00014,0.00017,0.0001,8e-05,2e-05,6e-05,6e-05,4e-05,3e-05]},{"name":"급락 충격","slot":4,"dash":"","mass":[8e-05,9e-05,8e-05,0.00011,0.00015,0.00019,0.00018,0.00017,0.00021,0.00026,0.00022,0.00029,0.0003,0.00037,0.00042,0.00043,0.00034,0.00043,0.00046,0.00048,0.00041,0.00047,0.00051,0.00052,0.00046,0.0005,0.00053,0.00047,0.00051,0.00047,0.00047,0.00041,0.00042,0.00038,0.00032,0.0003,0.00032,0.00033,0.0003,0.00034,0.00027,0.00023,0.00023,0.00018,0.00019,0.00021,0.00016,0.00014,0.00014,0.0001,0.0001,8e-05,9e-05,9e-05,6e-05,6e-05,5e-05,4e-05,5e-05,3e-05]},{"name":"국면 모델","slot":5,"dash":"2 3","mass":[0.0,0.00035,0.00017,0.00017,0.00052,0.00017,0.00052,0.00035,0.00035,0.0014,0.00122,0.0014,0.0021,0.00367,0.0042,0.0049,0.00613,0.00682,0.00997,0.01435,0.01645,0.0203,0.02205,0.0266,0.02887,0.03657,0.03885,0.04217,0.03657,0.04445,0.04427,0.04532,0.0329,0.03535,0.02485,0.02275,0.02432,0.01907,0.01312,0.01103,0.01085,0.00735,0.00735,0.00525,0.00315,0.00262,0.00227,0.00298,0.00262,0.00192,0.00105,0.00087,0.00122,0.0007,0.0007,0.00105,0.00017,0.00035,0.00087,0.00017]}]},"scenarios":[{"name":"강세 지속","slot":0,"p":0.237,"desc":"실적·수급 호조로 상승 흐름이 이어지는 경우"},{"name":"기본","slot":1,"p":0.3946,"desc":"시장 기대수익률(CAPM) 기준의 평균적 흐름 (--trend 시 최근 추세 일부 반영)"},{"name":"약세 전환","slot":2,"p":0.2053,"desc":"실적 둔화·밸류에이션 부담으로 하락 흐름이 이어지는 경우"},{"name":"조정 후 반등","slot":3,"p":0.1068,"desc":"초반 1/3 구간 급한 조정 이후 회복하는 V자 흐름"},{"name":"급락 충격","slot":4,"p":0.0563,"desc":"시장 위기·악재로 급락(점프)이 반복되는 스트레스 상황"}],"regimeFlow":{"names":["저변동(안정)","중간 변동","고변동(불안)"],"rows":[{"label":"현재","probs":[0.232,0.7575,0.0105]},{"label":"1주","probs":[0.3262,0.6226,0.0512]},{"label":"1개월","probs":[0.4724,0.4794,0.0482]}]}}</script>
+<script>
+(function(){
+const D = JSON.parse(document.getElementById('data').textContent);
+const NS = 'http://www.w3.org/2000/svg';
+const $ = s => document.querySelector(s);
+const fmt$ = v => v == null ? '-' : '$' + (v >= 10000 ? Math.round(v).toLocaleString('en-US') : v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}));
+const fmtPct = (v, d=0) => (v >= 0 ? '+' : '') + (v*100).toFixed(d) + '%';
+function el(tag, attrs, parent){ const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// ------------------------------------------------------------ 팬 차트
+const H = D.hist.prices.length;
+const fut = D.fut;
+const N = H + fut.dates.length - 1;            // 기준일은 과거 마지막 점과 미래 첫 점이 같음
+const dates = D.hist.dates.concat(fut.dates.slice(1));
+const fx = j => H - 1 + j;                    // 미래 j번째 → 전체 인덱스
+const series = [
+  {id:'bands', name:'전체 50%·90% 구간', kind:'area', on:true},
+  {id:'hist', name:'실제 주가', kind:'line', color:'var(--text)', on:true},
+  ...fut.lines.map(l => ({id:l.key, name:l.name + ' (' + l.note + ')', short:l.name, kind:'line', color:'var(--s'+l.slot+')', dash:l.dash, values:l.values, on:true})),
+  {id:'median', name:'전체 중앙값', short:'전체 중앙값', kind:'line', color:'var(--text)', dash:'6 3', values:fut.bands.p50, on:true},
+];
+const legend = $('#fan-legend');
+series.forEach(s => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.setAttribute('aria-pressed', 'true');
+  const key = document.createElement('span');
+  key.className = 'key' + (s.kind === 'area' ? ' area' : s.dash === '2 3' ? ' dot' : s.dash ? ' dash' : '');
+  if (s.color) key.style.color = s.color;
+  b.appendChild(key); b.appendChild(document.createTextNode(s.name));
+  b.addEventListener('click', () => { s.on = !s.on; b.setAttribute('aria-pressed', String(s.on)); drawFan(); });
+  legend.appendChild(b);
+});
+const eventIdx = D.events.map(d => dates.indexOf(d)).filter(i => i >= 0);
+
+let fanState = null, hoverIdx = null;
+function drawFan(){
+  const svg = $('#fan'); svg.innerHTML = '';
+  const W = svg.clientWidth || 800;
+  const Ht = Math.round(Math.max(280, Math.min(460, W * 0.52)));
+  svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`); svg.style.height = Ht + 'px';
+  const m = {l: W < 520 ? 46 : 58, r: 12, t: 10, b: 26};
+  const pw = W - m.l - m.r, ph = Ht - m.t - m.b;
+  const X = i => m.l + i / (N - 1) * pw;
+  let lo = Infinity, hi = -Infinity;
+  const take = v => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } };
+  if (series[1].on) D.hist.prices.forEach(take);
+  if (series[0].on) { fut.bands.p5.forEach(take); fut.bands.p95.forEach(take); }
+  series.slice(2).forEach(s => { if (s.on) s.values.forEach(take); });
+  D.levels.forEach(l => take(l.level));
+  if (!isFinite(lo)) { lo = D.s0 * .8; hi = D.s0 * 1.2; }
+  const pad = (hi - lo) * .06; lo -= pad; hi += pad;
+  const Y = v => m.t + (1 - (v - lo) / (hi - lo)) * ph;
+  // 격자 + y축
+  const g = el('g', {}, svg);
+  const step = niceStep((hi - lo) / 5);
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+    el('line', {x1:m.l, x2:W - m.r, y1:Y(v), y2:Y(v), stroke:'var(--grid)', 'stroke-width':1}, g);
+    const t = el('text', {x:m.l - 6, y:Y(v) + 4, 'text-anchor':'end'}, g); t.textContent = '$' + Math.round(v).toLocaleString('en-US');
+  }
+  // x축 (월 단위 눈금)
+  const months = []; let prev = '';
+  dates.forEach((d, i) => { const ym = d.slice(0, 7); if (ym !== prev) { months.push([i, ym]); prev = ym; } });
+  const every = Math.max(1, Math.ceil(months.length / Math.max(3, Math.floor(pw / 80))));
+  months.forEach(([i, ym], k) => { if (k % every || i === 0) return;
+    el('line', {x1:X(i), x2:X(i), y1:m.t + ph, y2:m.t + ph + 4, stroke:'var(--axis)'}, g);
+    const t = el('text', {x:X(i), y:Ht - 6, 'text-anchor':'middle'}, g); t.textContent = ym; });
+  el('line', {x1:m.l, x2:W - m.r, y1:m.t + ph, y2:m.t + ph, stroke:'var(--axis)'}, g);
+  // 기준일·이벤트 세로선
+  el('line', {x1:X(H - 1), x2:X(H - 1), y1:m.t, y2:m.t + ph, stroke:'var(--muted)', 'stroke-dasharray':'2 3'}, g);
+  const tt = el('text', {x:X(H - 1) + 4, y:m.t + 10}, g); tt.textContent = '기준일';
+  eventIdx.forEach(i => { el('line', {x1:X(i), x2:X(i), y1:m.t, y2:m.t + ph, stroke:'var(--muted)', 'stroke-dasharray':'4 3'}, g);
+    const t = el('text', {x:X(i) + 4, y:m.t + 24}, g); t.textContent = '이벤트'; });
+  // 목표가·손절가
+  D.levels.forEach(l => el('line', {x1:m.l, x2:W - m.r, y1:Y(l.level), y2:Y(l.level), stroke:'var(--text2)', 'stroke-dasharray':'6 4', 'stroke-width':1}, g));
+  // 분포 구간
+  if (series[0].on) {
+    const area = (a, b) => { let d = ''; a.forEach((v, j) => d += (j ? 'L' : 'M') + X(fx(j)).toFixed(1) + ',' + Y(v).toFixed(1));
+      for (let j = b.length - 1; j >= 0; j--) d += 'L' + X(fx(j)).toFixed(1) + ',' + Y(b[j]).toFixed(1); return d + 'Z'; };
+    el('path', {d:area(fut.bands.p95, fut.bands.p5), fill:'var(--band)', 'fill-opacity':css('--band90')}, svg);
+    el('path', {d:area(fut.bands.p75, fut.bands.p25), fill:'var(--band)', 'fill-opacity':css('--band50')}, svg);
+  }
+  const line = (vals, offset, color, dash, width) => { let d = ''; vals.forEach((v, j) => { if (v == null) return; d += (d ? 'L' : 'M') + X(offset + j).toFixed(1) + ',' + Y(v).toFixed(1); });
+    const p = el('path', {d, fill:'none', stroke:color, 'stroke-width':width || 2, 'stroke-linejoin':'round', 'stroke-linecap':'round'}, svg);
+    if (dash) p.setAttribute('stroke-dasharray', dash); };
+  if (series[1].on) line(D.hist.prices, 0, 'var(--text)', '', 1.6);
+  series.slice(2).forEach(s => { if (s.on) line(s.values, H - 1, s.color, s.dash, 2); });
+  // 목표가·손절가 라벨은 선 위에 (가독성)
+  D.levels.forEach(l => { const below = l.level < D.s0;
+    const t = el('text', {x:m.l + 6, y:Y(l.level) + (below ? 14 : -6), class:'halo'}, svg); t.textContent = `${l.label} ${fmt$(l.level)} · 도달 ${Math.round(l.p * 100)}%`; });
+  // 호버 레이어
+  const cross = el('line', {y1:m.t, y2:m.t + ph, stroke:'var(--text2)', 'stroke-width':1, visibility:'hidden'}, svg);
+  const dots = el('g', {}, svg);
+  el('rect', {x:m.l, y:m.t, width:pw, height:ph, fill:'transparent', class:'hit'}, svg);
+  fanState = {X, Y, m, pw, ph, cross, dots, W};
+  if (hoverIdx != null) showFan(hoverIdx);
+}
+function niceStep(raw){ const p = Math.pow(10, Math.floor(Math.log10(raw))); const f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+function showFan(i){
+  const s = fanState; if (!s) return; hoverIdx = i;
+  const x = s.X(i); s.cross.setAttribute('x1', x); s.cross.setAttribute('x2', x); s.cross.setAttribute('visibility', 'visible');
+  s.dots.innerHTML = '';
+  const rows = [];
+  const dot = (v, color) => el('circle', {cx:x, cy:s.Y(v), r:4, fill:color, stroke:'var(--surface)', 'stroke-width':2}, s.dots);
+  if (i <= H - 1 && series[1].on) { const v = D.hist.prices[i]; dot(v, 'var(--text)'); rows.push(['실제 주가', v, 'var(--text)']); }
+  if (i >= H - 1) {
+    const j = i - (H - 1);
+    series.slice(2).forEach(se => { if (!se.on) return; const v = se.values[j]; dot(v, se.color); rows.push([se.short, v, se.color]); });
+  }
+  rows.sort((a, b) => b[1] - a[1]);
+  const tip = $('#fan-tip');
+  let h = `<div class="t-date">${dates[i]}${i === H - 1 ? ' (기준일)' : ''}</div>`;
+  rows.forEach(([n, v, c]) => { h += `<div class="row"><span class="lbl"><span class="sw" style="background:${c}"></span>${n}</span><span>${fmt$(v)} <small>${fmtPct(v / D.s0 - 1)}</small></span></div>`; });
+  if (i > H - 1 && series[0].on) { const j = i - (H - 1);
+    h += `<div class="row"><span class="lbl">50% 구간</span><span>${fmt$(fut.bands.p25[j])} ~ ${fmt$(fut.bands.p75[j])}</span></div>`;
+    h += `<div class="row"><span class="lbl">90% 구간</span><span>${fmt$(fut.bands.p5[j])} ~ ${fmt$(fut.bands.p95[j])}</span></div>`; }
+  tip.innerHTML = h; tip.hidden = false;
+  const wrap = $('#fan-wrap').getBoundingClientRect();
+  const tw = tip.offsetWidth; let left = x + 14; if (left + tw > wrap.width) left = x - tw - 14; if (left < 0) left = 4;
+  tip.style.left = left + 'px'; tip.style.top = (s.m.t + 6) + 'px';
+}
+function hideFan(){ hoverIdx = null; if (fanState) { fanState.cross.setAttribute('visibility', 'hidden'); fanState.dots.innerHTML = ''; } $('#fan-tip').hidden = true; }
+const fanSvg = $('#fan');
+fanSvg.addEventListener('pointermove', e => { if (!fanState) return; const r = fanSvg.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (fanState.W / r.width);
+  const i = Math.round((px - fanState.m.l) / fanState.pw * (N - 1)); if (i < 0 || i > N - 1) { hideFan(); return; } showFan(i); });
+fanSvg.addEventListener('pointerleave', hideFan);
+fanSvg.addEventListener('keydown', e => { if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return; e.preventDefault();
+  const step = e.shiftKey ? 21 : 1; const i = hoverIdx == null ? H - 1 : hoverIdx + (e.key === 'ArrowRight' ? step : -step);
+  showFan(Math.max(0, Math.min(N - 1, i))); });
+fanSvg.addEventListener('blur', hideFan);
+
+// ------------------------------------------------------------ 시나리오 확률 막대
+const probs = $('#probs'); const pmax = Math.max(...D.scenarios.map(s => s.p));
+D.scenarios.forEach(s => { const row = document.createElement('div'); row.className = 'prob-row';
+  row.innerHTML = `<div class="prob-name"><span class="sw s${s.slot}"></span>${s.name}</div><div class="prob-track"><div class="prob-bar s${s.slot}" style="width:${(s.p / pmax * 100).toFixed(1)}%"></div></div><div class="prob-val">${Math.round(s.p * 100)}%</div><div class="prob-desc">${s.desc}</div>`;
+  probs.appendChild(row); });
+
+// ------------------------------------------------------------ 만기 수익률 분포
+function drawDist(){
+  const svg = $('#dist'); svg.innerHTML = '';
+  const W = svg.clientWidth || 500, Ht = 230; svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`); svg.style.height = Ht + 'px';
+  const m = {l:10, r:10, t:10, b:24}, pw = W - m.l - m.r, ph = Ht - m.t - m.b;
+  const bins = D.dist.bins, nb = bins.length - 1;
+  const total = Array.from({length:nb}, (_, k) => D.dist.groups.reduce((a, g) => a + g.mass[k], 0));
+  const top = Math.max(...total) * 1.08;
+  const X = v => m.l + (v - bins[0]) / (bins[nb] - bins[0]) * pw, Y = v => m.t + (1 - v / top) * ph;
+  let d = `M${X(bins[0])},${Y(0)}`; total.forEach((v, k) => d += `L${X(bins[k])},${Y(v)}L${X(bins[k + 1])},${Y(v)}`); d += `L${X(bins[nb])},${Y(0)}Z`;
+  el('path', {d, fill:'var(--band)', 'fill-opacity':css('--band50')}, svg);
+  D.dist.groups.forEach(g => { let p = ''; g.mass.forEach((v, k) => p += (k ? 'L' : 'M') + X(bins[k]) + ',' + Y(v) + 'L' + X(bins[k + 1]) + ',' + Y(v));
+    const path = el('path', {d:p, fill:'none', stroke:'var(--s' + g.slot + ')', 'stroke-width':1.6}, svg); if (g.dash) path.setAttribute('stroke-dasharray', g.dash); });
+  el('line', {x1:X(0), x2:X(0), y1:m.t, y2:m.t + ph, stroke:'var(--muted)', 'stroke-dasharray':'2 3'}, svg);
+  el('line', {x1:m.l, x2:W - m.r, y1:m.t + ph, y2:m.t + ph, stroke:'var(--axis)'}, svg);
+  const st = niceStep((bins[nb] - bins[0]) / 5);
+  for (let v = Math.ceil(bins[0] / st) * st; v <= bins[nb]; v += st) { const t = el('text', {x:X(v), y:Ht - 6, 'text-anchor':'middle'}, svg); t.textContent = fmtPct(v); }
+  const band = el('rect', {y:m.t, height:ph, fill:'var(--text)', 'fill-opacity':.06, visibility:'hidden'}, svg);
+  const hit = el('rect', {x:m.l, y:m.t, width:pw, height:ph, fill:'transparent'}, svg);
+  const tip = $('#dist-tip');
+  hit.addEventListener('pointermove', e => { const r = svg.getBoundingClientRect(); const px = (e.clientX - r.left) * (W / r.width);
+    const k = Math.min(nb - 1, Math.max(0, Math.floor((px - m.l) / pw * nb)));
+    band.setAttribute('x', X(bins[k])); band.setAttribute('width', X(bins[k + 1]) - X(bins[k])); band.setAttribute('visibility', 'visible');
+    let h = `<div class="t-date">수익률 ${fmtPct(bins[k], 1)} ~ ${fmtPct(bins[k + 1], 1)}</div><div class="row"><span class="lbl">전체 확률</span><span>${(total[k] * 100).toFixed(2)}%</span></div>`;
+    D.dist.groups.forEach(g => h += `<div class="row"><span class="lbl"><span class="sw s${g.slot}"></span>${g.name}</span><span>${(g.mass[k] * 100).toFixed(2)}%</span></div>`);
+    tip.innerHTML = h; tip.hidden = false; const tw = tip.offsetWidth; const x = X(bins[k]);
+    tip.style.left = (x + tw + 20 > W ? Math.max(4, x - tw - 10) : x + 14) + 'px'; tip.style.top = '8px'; });
+  hit.addEventListener('pointerleave', () => { band.setAttribute('visibility', 'hidden'); tip.hidden = true; });
+}
+
+// ------------------------------------------------------------ 국면 흐름
+function drawRegime(){
+  const rf = D.regimeFlow; if (!rf) return;
+  const box = $('#regime-flow'), lg = $('#regime-legend');
+  rf.names.forEach((n, i) => { const s = document.createElement('span'); s.className = 'item'; s.innerHTML = `<span class="sw sr${i}"></span>${n}`; lg.appendChild(s); });
+  rf.rows.forEach(r => { const row = document.createElement('div'); row.className = 'flow-row';
+    const bar = r.probs.map((p, i) => p > 0.004 ? `<div class="seg r${i}" style="flex:${p} 1 0" title="${r.label} · ${rf.names[i]} ${(p * 100).toFixed(0)}%">${p >= 0.09 ? Math.round(p * 100) + '%' : ''}</div>` : '').join('');
+    row.innerHTML = `<div class="flow-label">${r.label}</div><div class="flow-bar">${bar}</div>`; box.appendChild(row); });
+}
+
+function drawAll(){ drawFan(); drawDist(); }
+drawAll(); drawRegime();
+let raf = null; window.addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(drawAll); });
+})();
+</script>
+</body>
+</html>
