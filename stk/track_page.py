@@ -191,12 +191,16 @@ def render_track_page(track: TrackResult, generated: datetime | None = None, bac
         return _page(head + body)
 
     nd = s.get("target_dates", 0)
+    # 같은 종목·기준일·날짜를 여러 기간으로 예측한 평가는 한 번만 (요약·PIT·종목별 표용)
+    uniq = ev.sort_values("horizon").drop_duplicates(["symbol", "as_of", "date"])
+    s = dict(s, coverage50=float(uniq["in50"].mean()), coverage90=float(uniq["in90"].mean()),
+             mean_pit=float(uniq["pit"].mean()))
     tiles = "".join([
         _tile("50% 구간 적중률", pct(s["coverage50"], False, 1), "목표 50% — 실제가 예측 범위 가운데 절반 안에 든 비율",
               s["coverage50"], 0.5),
         _tile("90% 구간 적중률", pct(s["coverage90"], False, 1), "목표 90% — 넓은 범위 안에 든 비율", s["coverage90"], 0.9),
         _tile("평균 PIT", f"{s['mean_pit']:.2f}", "목표 0.50 — 높으면 실제가 예측보다 위쪽", s["mean_pit"], 0.5),
-        _tile("서로 다른 평가 날짜", f"{nd}일", f"평가 {s['evaluated']}개는 이 날짜들에 몰려 있음"),
+        _tile("서로 다른 평가 날짜", f"{nd}일", f"중복 제외 평가 {len(uniq)}개가 이 날짜들에 몰려 있음"),
     ])
     caution = ""
     if nd < 20:
@@ -206,14 +210,14 @@ def render_track_page(track: TrackResult, generated: datetime | None = None, bac
     bd = breakdown(ev)
     brow = "".join(
         f'<tr><td class="l">{r.horizon}거래일</td><td class="l">{e(r.checkpoint)}</td><td>{r.n}</td><td>{r.dates}</td>'
-        f'<td>{_flag(r.cov50, 0.5, 0.15)}</td><td>{_flag(r.cov90, 0.9, 0.10)}</td><td>{r.pit:.2f}</td>'
+        f'<td>{_flag(r.cov50, 0.5, 0.15 if r.dates >= 5 else 9)}</td><td>{_flag(r.cov90, 0.9, 0.10 if r.dates >= 5 else 9)}</td><td>{r.pit:.2f}</td>'
         f'<td>{pct(r.hit, False, 0) if r.hit == r.hit else "-"}</td></tr>' for r in bd.itertuples())
     btable = ('<div class="scroll"><table class="tr"><thead><tr><th class="l">예측 기간</th><th class="l">체크포인트</th>'
               '<th>평가 수</th><th>날짜 수</th><th>50% 적중</th><th>90% 적중</th><th>평균 PIT</th><th>방향 적중(만기)</th>'
               f'</tr></thead><tbody>{brow}</tbody></table></div>'
-              '<p class="note">"!" = 목표에서 크게 벗어남 (50% 구간 ±15%p, 90% 구간 −10%p 이상). 표본이 적을 땐 우연일 수 있습니다.</p>')
+              '<p class="note">"!" = 목표에서 크게 벗어남 (50% 구간 ±15%p, 90% 구간 −10%p 이상). 평가 날짜가 5일 미만인 줄은 표시하지 않습니다.</p>')
 
-    sym = by_symbol(ev)
+    sym = by_symbol(uniq)
     srow = "".join(
         f'<tr><td class="l">{e(r.symbol)}</td><td>{r.n}</td><td>{pct(r.cov50, False, 0)}</td>'
         f'<td>{pct(r.cov90, False, 0)}</td><td>{r.pit:.2f}</td><td>{e(str(r.last))}</td></tr>' for r in sym.itertuples())
@@ -232,10 +236,10 @@ def render_track_page(track: TrackResult, generated: datetime | None = None, bac
     key = ('<div class="tkey"><span><i class="k90"></i>90% 범위</span><span><i class="k50"></i>50% 범위</span>'
            '<span><i class="kpx"></i>실제 종가</span><span><i class="kmiss"></i>90% 범위 밖</span></div>')
 
-    body = (f'<section class="card"><h2>요약</h2><div class="tiles">{tiles}</div>{caution}</section>'
+    body = (f'<section class="card"><h2>요약 <span class="h-sub">1개월·6개월 예측이 같은 날짜를 평가한 경우 한 번만 셈</span></h2><div class="tiles">{tiles}</div>{caution}</section>'
             f'<section class="card"><h2>예측 기간 × 체크포인트별 <span class="h-sub">1개월·6개월 예측의 1주 평가가 겹치지 않게 나눠 봄</span></h2>{btable}</section>'
             '<section class="card"><h2>PIT 분포 <span class="h-sub">실제 주가가 예측 분포의 어디쯤 왔는지 (0 = 최하단, 1 = 최상단)</span></h2>'
-            f'{_pit_svg(ev["pit"].to_numpy())}'
+            f'{_pit_svg(uniq["pit"].to_numpy())}'
             '<p class="note">점선 = 고르게 맞을 때의 칸당 건수. 잘 보정된 예측이면 막대 높이가 점선 근처에 고르게 모입니다. 오른쪽에 몰리면 실제가 예측보다 높게, '
             '왼쪽이면 낮게, 양 끝에 몰리면 범위가 너무 좁았다는 뜻입니다.</p></section>'
             f'<section class="card"><h2>종목별 예측 vs 실제 <span class="h-sub">{e(first_cp)} 뒤 범위 (막대를 가리키면 상세)</span></h2>'

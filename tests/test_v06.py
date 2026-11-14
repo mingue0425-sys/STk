@@ -66,3 +66,17 @@ def test_meta_not_used_intraday_or_after_gap():
     assert len(parse_yahoo_chart(_payload(two_days), "META")) == 2
     same_day = int(pd.Timestamp("2026-11-12 16:00", tz="America/New_York").timestamp())
     assert parse_yahoo_chart(_payload(same_day), "META")["close"].iloc[-1] == 610.0
+
+
+def test_matured_final_checkpoint_renders_everywhere(tmp_path):
+    from stk.tracking import render_track
+
+    rec = _record("AAA", "2026-11-02", 7, 100.0, "2026-11-04")
+    rec["checkpoints"][1]["date"] = "2026-11-11"          # 만기 도달
+    tr = evaluate([rec, _record("BBB", "2026-11-02", 21, 100.0, "2026-11-09")], lambda s: _prices())
+    assert tr.summary["final_n"] == 1 and tr.evaluations["hit"].notna().sum() == 1
+    bd = breakdown(tr.evaluations)
+    assert bd["hit"].notna().sum() == 1
+    assert "방향 적중" in render_track(tr, tmp_path / "f.jsonl")
+    page = render_track_page(tr)
+    assert "만기" in page and page.count('class="sm"') == 2
