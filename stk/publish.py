@@ -4,6 +4,7 @@
 
 site/
   index.html              첫 화면: 기간별 요약 카드 · 흐름 변화 · 실전 성과
+  track.html              실전 성과 상세: 기간×체크포인트별 적중률 · PIT 분포 · 종목별 예측 vs 실제 차트
   README.md               GitHub 에서 바로 보이는 요약
   latest/<1m|6m>/         기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
   history/YYYY-MM-DD.md   날짜별 요약 (파일 이름 = 데이터 기준일, 실행한 날 아님) + 같은 이름의 .html
@@ -25,6 +26,7 @@ from pathlib import Path
 from .forecast import horizon_label
 from .html_report import CSS as REPORT_CSS
 from .report import DISCLAIMER, pct
+from .track_page import render_track_page
 from .tracking import TrackResult, append_log, evaluate, load_log
 from .watch import (
     DASH_CSS,
@@ -127,7 +129,7 @@ def _landing(runs: list[HorizonRun], track: TrackResult | None, per_h: dict[int,
             track_txt = (f"<p>평가된 체크포인트 {s['evaluated']}개 · 50% 구간 적중 {pct(s['coverage50'], False, 0)} (목표 50%) · "
                          f"90% 구간 적중 {pct(s['coverage90'], False, 0)} (목표 90%) · 평균 PIT {s['mean_pit']:.2f}"
                          + (f" · 만기 방향 적중 {pct(s['hit_rate'], False, 0)} ({s['final_n']}건)" if s.get("final_n") else "")
-                         + "</p>")
+                         + f" · 서로 다른 평가 날짜 {s.get('target_dates', 0)}일</p>")
         else:
             track_txt = f"<p>기록 {s['records']}건 · 평가 대기 {s['pending']}개 — 체크포인트 날짜가 지나면 실제 주가와 비교한 적중률이 쌓입니다.</p>"
     return f"""<!doctype html>
@@ -145,7 +147,7 @@ def _landing(runs: list[HorizonRun], track: TrackResult | None, per_h: dict[int,
   <p class="meta">{meta}</p>
 </header>
 <div class="hgrid">{''.join(cards)}</div>
-<section class="card"><h2>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h2>{track_txt}</section>
+<section class="card"><h2>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h2>{track_txt}<a class="go" href="track.html">자세히 보기 — 종목별 예측 vs 실제 차트 →</a></section>
 <p class="note">지난 기록: <a href="history/index.html">날짜별 요약</a> · 예측 기록: <a href="data/forecasts.jsonl">forecasts.jsonl</a> · 실행 상태: <a href="data/latest.json">latest.json</a></p>
 <footer class="foot">{e(DISCLAIMER)}</footer>
 </main>
@@ -324,6 +326,7 @@ def publish_site(
     ok_dates = [it.forecast.stats.last_date for r in runs for it in r.ok]
     as_of = max(ok_dates) if ok_dates else None
     (site / "index.html").write_text(_landing(runs, track, per_h, generated), encoding="utf-8")
+    (site / "track.html").write_text(render_track_page(track, generated), encoding="utf-8")
     readme = "# 관심종목 흐름 예측\n\n" + "\n\n".join(md_parts)
     if alerts:
         readme += "\n\n## 알림\n\n" + "\n".join(f"- {a}" for a in alerts)

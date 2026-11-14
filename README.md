@@ -30,6 +30,8 @@ pip install -r requirements.txt        # numpy, pandas, requests, matplotlib
 ```
 
 Python 3.10 이상. 시세(종목, SPY, VIX, VIX3M, 13주 T-bill)는 Yahoo Finance에서 내려받아 `~/.cache/stk/` 에 12시간 캐시합니다.
+Yahoo 가 장 마감 후 일봉을 늦게 올리는 경우(예: META)에는, 응답의 시세 요약(meta)에 이미 들어 있는 그날 종가·고가·저가·거래량으로
+마지막 하루를 채웁니다 (장 마감 이후이고 바로 다음 거래일일 때만; 다음 수신 때 정식 일봉으로 대체).
 
 ## 빠른 시작
 
@@ -114,6 +116,11 @@ python -m stk track --csv-out eval.csv
 이것은 **실제로 예측해 둔 것이 맞았는지**를 보여주는 실전 성적표입니다. 수정주가는 배당 때마다 과거 값이 다시 조정되므로,
 실제 수익률은 현재 시점의 수정주가 시계열에서 기준일 대비 비율로 계산합니다.
 
+`track` 결과에는 **예측 기간 × 체크포인트별 표**와 **서로 다른 평가 날짜 수**가 함께 나옵니다. 같은 날 1개월·6개월을 함께
+예측하면 두 예측의 '1주 뒤' 체크포인트가 겹치고, 같은 날 20종목은 시장과 함께 움직이므로, 평가 개수보다 **날짜 수**가
+실질 표본 크기에 가깝습니다. 공개 사이트의 **실전 성과 페이지(`track.html`)** 는 이 표와 함께 PIT 분포 그래프,
+종목별 '그날 예측한 1주 뒤 범위 vs 실제 주가' 차트를 보여 줍니다.
+
 > 매일(또는 매주) `watch` 를 자동 실행해 두면 기록이 쌓여 실전 적중률을 확인할 수 있습니다.
 > 가장 쉬운 방법은 아래 GitHub Actions 자동 실행이고, 내 PC에서는 crontab 으로도 됩니다:
 > `30 7 * * 2-6 cd ~/STk && python -m stk watch --file watchlist.txt`
@@ -162,6 +169,7 @@ index.html             첫 화면: 기간별 요약 카드(상승/횡보/하락 
 README.md              기간별 요약표 (GitHub 에서 바로 보임)
 latest/1m/, latest/6m/ 기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
 history/YYYY-MM-DD.md  날짜별 요약 기록 (파일 이름 = 데이터 기준일)
+track.html             실전 성과 상세: 기간×체크포인트별 적중률 · PIT 분포 · 종목별 예측 범위 vs 실제 주가 차트
 data/forecasts.jsonl   누적 예측 기록 → 날짜가 지나면 자동으로 실제 주가와 비교 (실전 성과)
 data/latest.json       이번 실행 상태: 기준일 · 기간별 성공 종목 수 · 오류 · 데이터 경고 (점검용)
 alerts.md              흐름 변화·불안 국면 진입·데이터 경고가 있을 때만 생성
@@ -410,6 +418,7 @@ stk/
   watch.py        관심종목 병렬 예측 + 대시보드 HTML
   publish.py      여러 예측 기간 사이트(첫 화면·기간별 대시보드·README·history·알림) 생성
   tracking.py     예측 기록(JSONL)과 실전 성과 추적
+  track_page.py   실전 성과 페이지(track.html): 적중률 표 · PIT 분포 · 종목별 예측 vs 실제 차트
   earnings.py     실적 발표일 추정 (가격·거래량 패턴)
   sector.py       섹터 ETF 판별 · 위험 분해 · 상대 강도
   narrative.py    한국어 요약 해설

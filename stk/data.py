@@ -130,7 +130,31 @@ def parse_yahoo_chart(payload: dict, symbol: str = "") -> pd.DataFrame:
     frame = frame[~frame.index.duplicated(keep="last")].sort_index()
     if frame.empty:
         raise DataError(f"{symbol}: 유효한 종가가 없습니다")
-    return frame
+    return _patch_from_meta(frame, res.get("meta") or {}, tz)
+
+
+def _patch_from_meta(frame: pd.DataFrame, meta: dict, tz: str) -> pd.DataFrame:
+    """일봉 배열에 마지막 거래일이 빠졌지만 meta 요약에는 그날 종가가 있으면 한 줄 채웁니다.
+
+    Yahoo 는 가끔(예: META) 장 마감 후 몇 시간~하루 동안 일봉을 늦게 올리는데, 그때도 meta 의
+    regularMarketPrice·고가·저가·거래량은 이미 마감 값입니다. 안전하게 하기 위해
+    ① 장 마감(16:00 뉴욕) 이후 시각이고 ② 마지막 일봉의 바로 다음 평일인 경우에만 채웁니다.
+    수정주가는 그날 배당·분할이 없다고 보고 종가와 같게 둡니다 (다음 수신 때 정식 일봉으로 대체됨)."""
+    t, price = meta.get("regularMarketTime"), meta.get("regularMarketPrice")
+    if not t or not price:
+        return frame
+    ts = pd.Timestamp(int(t), unit="s", tz="UTC").tz_convert(tz)
+    day = ts.normalize().tz_localize(None)
+    last = frame.index[-1]
+    if ts.hour < 16 or day <= last or np.busday_count(last.date(), day.date()) != 1:
+        return frame
+    hi, lo = meta.get("regularMarketDayHigh"), meta.get("regularMarketDayLow")
+    row = pd.DataFrame({
+        "open": [np.nan], "high": [float(hi) if hi else float(price)], "low": [float(lo) if lo else float(price)],
+        "close": [float(price)], "adj_close": [float(price)],
+        "volume": [float(meta["regularMarketVolume"]) if meta.get("regularMarketVolume") else np.nan],
+    }, index=pd.DatetimeIndex([day], name="date"))
+    return pd.concat([frame, row])
 
 
 def load_csv(path: str | Path) -> pd.DataFrame:

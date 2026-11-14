@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -101,6 +101,7 @@ class TrackResult:
     evaluations: pd.DataFrame   # 체크포인트 평가 행
     pending: pd.DataFrame       # 아직 날짜가 오지 않은 기록
     summary: dict
+    prices: dict = field(default_factory=dict)   # 종목 → 실제 수정주가 (차트용)
 
 
 def evaluate(records: list[dict], price_loader) -> TrackResult:
@@ -147,6 +148,8 @@ def evaluate(records: list[dict], price_loader) -> TrackResult:
                 "final": final,
                 "realized_return": realized - 1,
                 "median_return": q[i50] - 1,
+                "lo90": q[i05] - 1, "lo50": q[i25] - 1, "hi50": q[i75] - 1, "hi90": q[i95] - 1,
+                "base_price": base_price,
                 "in50": bool(q[i25] <= realized <= q[i75]),
                 "in90": bool(q[i05] <= realized <= q[i95]),
                 "pit": _pit(levels, q, realized),
@@ -163,9 +166,38 @@ def evaluate(records: list[dict], price_loader) -> TrackResult:
             "coverage90": float(ev["in90"].mean()),
             "mean_pit": float(ev["pit"].mean()),
             "final_n": int(len(finals)),
+            "target_dates": int(ev["date"].nunique()),
             "hit_rate": float(finals["hit"].dropna().mean()) if finals["hit"].notna().any() else float("nan"),
         })
-    return TrackResult(ev, pend, summary)
+    return TrackResult(ev, pend, summary, {k: v for k, v in cache.items() if v is not None})
+
+
+def breakdown(ev: pd.DataFrame) -> pd.DataFrame:
+    """예측 기간 × 체크포인트별 성과. 같은 날 같은 종목을 여러 기간으로 예측하면 1주 체크포인트가
+    겹치므로, 합계 하나보다 이 표가 정직합니다. dates = 서로 다른 평가 날짜 수(실질 표본 크기에 가까움)."""
+    if ev is None or ev.empty:
+        return pd.DataFrame()
+    rows = []
+    for (h, day_label), g in ev.groupby(["horizon", "checkpoint"], sort=False):
+        hits = g["hit"].dropna() if "hit" in g else pd.Series(dtype=float)
+        rows.append({
+            "horizon": int(h), "checkpoint": day_label, "n": int(len(g)), "dates": int(g["date"].nunique()),
+            "cov50": float(g["in50"].mean()), "cov90": float(g["in90"].mean()), "pit": float(g["pit"].mean()),
+            "hit": float(hits.astype(float).mean()) if len(hits) else float("nan"),
+            "_order": float(g["date"].map(pd.Timestamp).sub(g["as_of"].map(pd.Timestamp)).dt.days.median()),
+        })
+    return pd.DataFrame(rows).sort_values(["horizon", "_order"]).drop(columns="_order").reset_index(drop=True)
+
+
+def by_symbol(ev: pd.DataFrame) -> pd.DataFrame:
+    if ev is None or ev.empty:
+        return pd.DataFrame()
+    g = ev.groupby("symbol")
+    out = pd.DataFrame({
+        "n": g.size(), "cov50": g["in50"].mean(), "cov90": g["in90"].mean(), "pit": g["pit"].mean(),
+        "last": g["date"].max(),
+    })
+    return out.reset_index().sort_values("symbol").reset_index(drop=True)
 
 
 def render_track(result: TrackResult, log_file: Path) -> str:
@@ -186,7 +218,16 @@ def render_track(result: TrackResult, log_file: Path) -> str:
         ["방향 적중률 (만기 도달분)", pct(s["hit_rate"], False) if s["final_n"] else "-", f"{s['final_n']}건"],
     ]
     out.append(_indent(table(["지표", "결과", "이상적 값 / 표본"], rows)))
+    out.append(f"  서로 다른 평가 날짜 {s.get('target_dates', 0)}개 — 같은 날 여러 종목·기간을 함께 평가하므로 실질 표본은 이보다 작습니다.")
     out.append("")
+    bd = breakdown(result.evaluations)
+    if len(bd):
+        rows = [[f"{r.horizon}일", r.checkpoint, str(r.n), str(r.dates), pct(r.cov50, False), pct(r.cov90, False),
+                 f"{r.pit:.2f}", pct(r.hit, False) if r.hit == r.hit else "-"] for r in bd.itertuples()]
+        out.append("  예측 기간 × 체크포인트별")
+        out.append(_indent(table(["예측 기간", "체크포인트", "건수", "날짜 수", "50% 적중", "90% 적중", "평균 PIT", "방향 적중"], rows,
+                                 ["right", "left", "right", "right", "right", "right", "right", "right"])))
+        out.append("")
     ev = result.evaluations.sort_values(["as_of", "symbol", "horizon", "date"]).tail(30)
     rows = [
         [r.symbol, r.as_of, f"{r.horizon}일", r.checkpoint, r.date, pct(r.realized_return), pct(r.median_return),
