@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>실전 성과</title>
+<style>
+:root{color-scheme:light;
+--page:#f4f3ef;--surface:#fcfcfb;--text:#0b0b0b;--text2:#52514e;--muted:#7a7974;--grid:#e4e3df;--axis:#cfcec9;
+--band:#8a8984;--band90:.16;--band50:.30;
+--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;--s6:#6250d6;--s7:#e34948;
+--r0:#86b6ef;--r1:#2a78d6;--r2:#104281;--r0t:#0b0b0b;--r1t:#ffffff;--r2t:#ffffff;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+--page:#121211;--surface:#1a1a19;--text:#f0efec;--text2:#c3c2b7;--muted:#97968e;--grid:#2e2e2c;--axis:#3d3d3a;
+--band:#a3a29b;--band90:.14;--band50:.26;
+--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--s7:#e66767;
+--r0:#9ec5f4;--r1:#3987e5;--r2:#184f95;--r0t:#0b0b0b;--r1t:#0b0b0b;--r2t:#ffffff;}}
+:root[data-theme="dark"]{color-scheme:dark;
+--page:#121211;--surface:#1a1a19;--text:#f0efec;--text2:#c3c2b7;--muted:#97968e;--grid:#2e2e2c;--axis:#3d3d3a;
+--band:#a3a29b;--band90:.14;--band50:.26;
+--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;--s6:#9085e9;--s7:#e66767;
+--r0:#9ec5f4;--r1:#3987e5;--r2:#184f95;--r0t:#0b0b0b;--r1t:#0b0b0b;--r2t:#ffffff;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);
+font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;
+font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:26px;margin:0;letter-spacing:-.01em}
+h2{font-size:16px;margin:0 0 12px}
+h3{font-size:14px;margin:16px 0 6px}
+.h-sub{font-size:.62em;font-weight:500;color:var(--text2);margin-left:6px}
+h2 .h-sub{font-size:12px}
+.meta{margin:4px 0 16px;color:var(--text2);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:18px 18px 14px;margin:0 0 16px}
+.hero{display:grid;grid-template-columns:minmax(220px,1fr) 2.4fr;gap:18px;align-items:center}
+.verdict-label,.kpi-label{font-size:12px;color:var(--text2)}
+.verdict-value{font-size:24px;font-weight:700;margin:2px 0 4px;letter-spacing:-.01em}
+.verdict-sub{color:var(--text2);font-size:13px}
+.narr{grid-column:1/-1;margin:4px 0 0;padding-top:12px;border-top:1px solid var(--grid);font-size:14px;line-height:1.7}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi{border:1px solid var(--grid);border-radius:10px;padding:10px 12px}
+.kpi-value{font-size:18px;font-weight:650;margin:2px 0;font-variant-numeric:tabular-nums;line-height:1.3}
+.kpi-sub{font-size:11.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid2>.card{margin:0 0 16px}
+.card,.hero>*,.grid2>*,.kpi{min-width:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 8px;margin:0 0 10px}
+.legend button,.legend span.item{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--grid);background:transparent;
+color:var(--text);border-radius:999px;padding:3px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.legend span.item{cursor:default}
+.legend button[aria-pressed="false"]{color:var(--muted);opacity:.55}
+.legend button:focus-visible{outline:2px solid var(--s0);outline-offset:1px}
+.key{display:inline-block;width:16px;height:0;border-top:2px solid currentColor}
+.key.dash{border-top-style:dashed}.key.dot{border-top-style:dotted}
+.key.area{height:10px;border:0;background:var(--band);opacity:.35;border-radius:2px}
+.chart-wrap{position:relative}
+.chart{display:block;width:100%;overflow:visible;outline:none}
+.chart:focus-visible{outline:2px solid var(--s0);outline-offset:4px;border-radius:4px}
+.chart text{fill:var(--text2);font-size:11px;font-variant-numeric:tabular-nums}
+.chart text.halo{fill:var(--text);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;font-weight:600}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--axis);border-radius:8px;
+padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:170px;z-index:5}
+.tip .t-date{font-weight:650;margin-bottom:4px}
+.tip .row{display:flex;align-items:center;gap:6px;justify-content:space-between;white-space:nowrap}
+.tip .row span:last-child{font-variant-numeric:tabular-nums}
+.tip .lbl{display:inline-flex;align-items:center;gap:6px;color:var(--text2)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.s0{background:var(--s0)}.s1{background:var(--s1)}.s2{background:var(--s2)}.s3{background:var(--s3)}
+.s4{background:var(--s4)}.s5{background:var(--s5)}.s6{background:var(--s6)}.s7{background:var(--s7)}
+.sr0{background:var(--r0)}.sr1{background:var(--r1)}.sr2{background:var(--r2)}
+.probs{display:flex;flex-direction:column;gap:10px}
+.prob-row{display:grid;grid-template-columns:110px 1fr 44px;gap:10px;align-items:center}
+.prob-name{font-size:13px}
+.prob-track{height:14px;background:transparent;border-radius:4px;position:relative}
+.prob-bar{height:14px;border-radius:0 4px 4px 0;min-width:2px}
+.prob-val{text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.prob-desc{grid-column:2/4;font-size:11.5px;color:var(--muted);margin-top:-6px}
+.flow{display:flex;flex-direction:column;gap:6px;margin:6px 0 8px}
+.flow-row{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center}
+.flow-label{font-size:12px;color:var(--text2)}
+.flow-bar{display:flex;gap:2px;height:22px}
+.seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;font-variant-numeric:tabular-nums;overflow:hidden}
+.seg:first-child{border-radius:4px 0 0 4px}.seg:last-child{border-radius:0 4px 4px 0}
+.seg.r0{background:var(--r0);color:var(--r0t)}.seg.r1{background:var(--r1);color:var(--r1t)}.seg.r2{background:var(--r2);color:var(--r2t)}
+.tbl-wrap{overflow-x:auto;margin:4px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
+th{font-weight:600;color:var(--text2);font-size:12px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:0}
+.note{font-size:12px;color:var(--muted);margin:8px 0 0}
+.lead{margin:0 0 6px;color:var(--text)}
+ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0;color:var(--text)}
+.foot{font-size:12px;color:var(--muted);margin-top:8px}
+.warn{margin:0 0 12px;padding:8px 12px;border:1px solid var(--axis);border-left:4px solid var(--s3);border-radius:8px;font-size:13px;background:var(--surface)}
+@media (max-width:860px){.hero{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+@media (max-width:420px){.kpis{grid-template-columns:1fr}.prob-row{grid-template-columns:88px 1fr 40px}h1{font-size:22px}}
+
+.wrap{max-width:1440px}
+.kpis.five{grid-template-columns:repeat(5,1fr)}
+#watch th button{all:unset;cursor:pointer;color:var(--text2);font-weight:600;font-size:12px}
+#watch th button:focus-visible{outline:2px solid var(--s0);outline-offset:2px}
+#watch th button[data-dir="asc"]::after{content:" ▲";font-size:9px}
+#watch th button[data-dir="desc"]::after{content:" ▼";font-size:9px}
+#watch td{vertical-align:middle}
+#watch td.sym a{color:var(--text);font-weight:650;text-decoration:none;border-bottom:1px solid var(--axis)}
+#watch td.sym a:hover{border-bottom-color:var(--text)}
+#watch tr.err td{color:var(--muted)}
+.dir{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.dw{cursor:help;color:var(--s3);font-size:12px}
+.delta{white-space:nowrap;cursor:help}.delta.up span{color:var(--s0)}.delta.down span{color:var(--s7)}.delta.flat span{color:var(--muted)}
+.muted{color:var(--muted)}
+.badge{display:inline-block;margin-left:6px;padding:0 6px;border:1px solid var(--axis);border-radius:999px;font-size:11px;color:var(--text2)}
+.kpi-value.small{font-size:15px}
+.sec{white-space:nowrap;cursor:help}
+.hnav{display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 16px}
+.hnav a{padding:4px 12px;border:1px solid var(--grid);border-radius:999px;color:var(--text2);text-decoration:none;font-size:13px}
+.hnav a[aria-current="page"]{background:var(--text);color:var(--surface);border-color:var(--text)}
+.dir.up span{color:var(--s0)}.dir.down span{color:var(--s7)}.dir.flat span{color:var(--muted)}
+.spark{display:block}
+.spark .b90{fill:var(--band);fill-opacity:var(--band90)}
+.spark .b50{fill:var(--band);fill-opacity:var(--band50)}
+.spark .hist{fill:none;stroke:var(--text);stroke-width:1.3}
+.spark .med{fill:none;stroke:var(--text);stroke-width:1.3;stroke-dasharray:3 2}
+.spark .now{stroke:var(--muted);stroke-width:1;stroke-dasharray:1 2}
+@media (max-width:860px){.kpis.five{grid-template-columns:repeat(2,1fr)}}
+
+.wrap{max-width:1180px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:4px 0 6px}
+.tile{border:1px solid var(--grid);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.tile .l{font-size:12px;color:var(--text2)}.tile .v{font-size:24px;font-weight:650;letter-spacing:-.01em}
+.tile .t{font-size:12px;color:var(--muted)}
+.gauge{position:relative;height:8px;border-radius:4px;background:var(--grid);margin-top:6px}
+.gauge i{position:absolute;top:0;bottom:0;left:0;border-radius:4px;background:var(--text2)}
+.gauge b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text)}
+.scroll{overflow-x:auto}
+table.tr{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+table.tr th,table.tr td{padding:6px 8px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+table.tr th{font-size:12px;color:var(--text2);font-weight:600}
+table.tr th:first-child,table.tr td:first-child,table.tr td.l,table.tr th.l{text-align:left}
+.off{color:var(--s7)}
+.pit .bar{fill:var(--s0)}.pit .bar:hover{fill-opacity:.8}
+.ax text{fill:var(--muted);font-size:11px}.ax line,.ax path{stroke:var(--axis)}
+.ref{stroke:var(--text);stroke-width:1.2;stroke-dasharray:4 3}
+.grid-sm{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.sm{border:1px solid var(--grid);border-radius:10px;padding:8px 10px 6px;background:var(--surface)}
+.sm h3{margin:0;font-size:14px;display:flex;justify-content:space-between;gap:8px}
+.sm h3 span{font-weight:400;font-size:12px;color:var(--text2)}
+.sm .b90{fill:var(--band);fill-opacity:calc(var(--band90) * 2)}
+.sm .b50{fill:var(--band);fill-opacity:calc(var(--band50) * 2)}
+.sm .px{fill:none;stroke:var(--text);stroke-width:1.5}
+.sm .hitpt{fill:var(--text);stroke:var(--surface);stroke-width:2}
+.sm .misspt{fill:var(--s7);stroke:var(--surface);stroke-width:2}
+.sm .hov:hover .b50,.sm .hov:hover .b90{fill:var(--s0)}
+.tkey{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin:0 0 10px}
+.tkey i{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-right:5px;background:var(--band)}
+.tkey i.k90{opacity:.35}.tkey i.k50{opacity:.65}.tkey i.kpx{height:2px;background:var(--text);border-radius:0;vertical-align:3px}
+.tkey i.kmiss{width:9px;height:9px;border-radius:50%;background:var(--s7)}
+@media (max-width:760px){.tiles{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header class="top"><p class="note"><a href="index.html">← 처음으로</a></p><h1>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h1><p class="meta">생성 2026-11-14 14:10 · 예측 기록 321건 · 평가 123개 · 대기 840개</p></header><section class="card"><h2>요약</h2><div class="tiles"><div class="tile"><div class="l">50% 구간 적중률</div><div class="v">45.5%</div><div class="t">목표 50% — 실제가 예측 범위 가운데 절반 안에 든 비율</div><div class="gauge" aria-hidden="true"><i style="width:45.5%"></i><b style="left:calc(50.0% - 1px)"></b></div></div><div class="tile"><div class="l">90% 구간 적중률</div><div class="v">92.7%</div><div class="t">목표 90% — 넓은 범위 안에 든 비율</div><div class="gauge" aria-hidden="true"><i style="width:92.7%"></i><b style="left:calc(90.0% - 1px)"></b></div></div><div class="tile"><div class="l">평균 PIT</div><div class="v">0.61</div><div class="t">목표 0.50 — 높으면 실제가 예측보다 위쪽</div><div class="gauge" aria-hidden="true"><i style="width:61.3%"></i><b style="left:calc(50.0% - 1px)"></b></div></div><div class="tile"><div class="l">서로 다른 평가 날짜</div><div class="v">3일</div><div class="t">평가 123개는 이 날짜들에 몰려 있음</div></div></div><p class="note">※ 평가가 3개 날짜에만 몰려 있습니다. 같은 날 20종목이 함께 움직이므로 실질 표본은 날짜 수에 가깝고, 최소 몇 주는 쌓여야 의미 있는 판단이 가능합니다.</p></section><section class="card"><h2>예측 기간 × 체크포인트별 <span class="h-sub">1개월·6개월 예측의 1주 평가가 겹치지 않게 나눠 봄</span></h2><div class="scroll"><table class="tr"><thead><tr><th class="l">예측 기간</th><th class="l">체크포인트</th><th>평가 수</th><th>날짜 수</th><th>50% 적중</th><th>90% 적중</th><th>평균 PIT</th><th>방향 적중(만기)</th></tr></thead><tbody><tr><td class="l">21거래일</td><td class="l">1주</td><td>60</td><td>3</td><td>45%</td><td>93%</td><td>0.62</td><td>-</td></tr><tr><td class="l">63거래일</td><td class="l">1주</td><td>3</td><td>1</td><td><span class="off">67% !</span></td><td><span class="off">67% !</span></td><td>0.42</td><td>-</td></tr><tr><td class="l">126거래일</td><td class="l">1주</td><td>60</td><td>3</td><td>45%</td><td>93%</td><td>0.62</td><td>-</td></tr></tbody></table></div><p class="note">"!" = 목표에서 크게 벗어남 (50% 구간 ±15%p, 90% 구간 −10%p 이상). 표본이 적을 땐 우연일 수 있습니다.</p></section><section class="card"><h2>PIT 분포 <span class="h-sub">실제 주가가 예측 분포의 어디쯤 왔는지 (0 = 최하단, 1 = 최상단)</span></h2><svg class="pit" viewBox="0 0 520 190" role="img" aria-label="PIT 분포 막대그래프" style="width:100%;max-width:520px;height:auto"><g class="ax"><line x1="34" x2="512" y1="164.0" y2="164.0" stroke-opacity=".5"/><text x="28" y="168.0" text-anchor="end">0</text><line x1="34" x2="512" y1="97.0" y2="97.0" stroke-opacity=".5"/><text x="28" y="101.0" text-anchor="end">12</text><line x1="34" x2="512" y1="30.1" y2="30.1" stroke-opacity=".5"/><text x="28" y="34.1" text-anchor="end">24</text><text x="34.0" y="182" text-anchor="middle">0.0</text><text x="129.6" y="182" text-anchor="middle">0.2</text><text x="225.2" y="182" text-anchor="middle">0.4</text><text x="320.8" y="182" text-anchor="middle">0.6</text><text x="416.4" y="182" text-anchor="middle">0.8</text><text x="512.0" y="182" text-anchor="middle">1.0</text></g><g><title>PIT 0.0–0.1: 5건 (4%)</title><rect x="34.0" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M35.0,164.0V140.1Q35.0,136.1 39.0,136.1H76.8Q80.8,136.1 80.8,140.1V164.0Z"/></g><g><title>PIT 0.1–0.2: 8건 (7%)</title><rect x="81.8" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M82.8,164.0V123.4Q82.8,119.4 86.8,119.4H124.6Q128.6,119.4 128.6,123.4V164.0Z"/></g><g><title>PIT 0.2–0.3: 10건 (8%)</title><rect x="129.6" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M130.6,164.0V112.2Q130.6,108.2 134.6,108.2H172.4Q176.4,108.2 176.4,112.2V164.0Z"/></g><g><title>PIT 0.3–0.4: 14건 (11%)</title><rect x="177.4" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M178.4,164.0V89.9Q178.4,85.9 182.4,85.9H220.2Q224.2,85.9 224.2,89.9V164.0Z"/></g><g><title>PIT 0.4–0.5: 4건 (3%)</title><rect x="225.2" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M226.2,164.0V145.7Q226.2,141.7 230.2,141.7H268.0Q272.0,141.7 272.0,145.7V164.0Z"/></g><g><title>PIT 0.5–0.6: 7건 (6%)</title><rect x="273.0" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M274.0,164.0V128.9Q274.0,124.9 278.0,124.9H315.8Q319.8,124.9 319.8,128.9V164.0Z"/></g><g><title>PIT 0.6–0.7: 14건 (11%)</title><rect x="320.8" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M321.8,164.0V89.9Q321.8,85.9 325.8,85.9H363.6Q367.6,85.9 367.6,89.9V164.0Z"/></g><g><title>PIT 0.7–0.8: 21건 (17%)</title><rect x="368.6" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M369.6,164.0V50.8Q369.6,46.8 373.6,46.8H411.4Q415.4,46.8 415.4,50.8V164.0Z"/></g><g><title>PIT 0.8–0.9: 24건 (20%)</title><rect x="416.4" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M417.4,164.0V34.1Q417.4,30.1 421.4,30.1H459.2Q463.2,30.1 463.2,34.1V164.0Z"/></g><g><title>PIT 0.9–1.0: 16건 (13%)</title><rect x="464.2" y="10" width="47.8" height="154" fill="transparent"/><path class="bar" d="M465.2,164.0V78.7Q465.2,74.7 469.2,74.7H507.0Q511.0,74.7 511.0,78.7V164.0Z"/></g><line class="ref" x1="34" x2="512" y1="95.4" y2="95.4"><title>고르게 맞을 때 칸마다 12.3건</title></line><line x1="34" x2="512" y1="164" y2="164" stroke="var(--axis)"/></svg><p class="note">점선 = 고르게 맞을 때의 칸당 건수. 잘 보정된 예측이면 막대 높이가 점선 근처에 고르게 모입니다. 오른쪽에 몰리면 실제가 예측보다 높게, 왼쪽이면 낮게, 양 끝에 몰리면 범위가 너무 좁았다는 뜻입니다.</p></section><section class="card"><h2>종목별 예측 vs 실제 <span class="h-sub">1주 뒤 범위 (막대를 가리키면 상세)</span></h2><div class="tkey"><span><i class="k90"></i>90% 범위</span><span><i class="k50"></i>50% 범위</span><span><i class="kpx"></i>실제 종가</span><span><i class="kmiss"></i>90% 범위 밖</span></div><div class="grid-sm"><div class="sm"><h3>AAPL<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="AAPL 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">318</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">377</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 322.93–376.55 · 50% 339.33–359.38
+실제 355.36 (50%·90% 안)</title><rect class="b90" x="168.4" y="12.4" width="8.0" height="78.5" rx="1.5"/><rect class="b50" x="168.4" y="37.5" width="8.0" height="29.4" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 317.88–370.90 · 50% 334.00–353.88
+실제 354.88 (90% 안)</title><rect class="b90" x="192.2" y="20.6" width="8.0" height="77.6" rx="1.5"/><rect class="b50" x="192.2" y="45.5" width="8.0" height="29.1" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 317.51–367.59 · 50% 333.10–351.40
+실제 356.27 (90% 안)</title><rect class="b90" x="216.0" y="25.5" width="8.0" height="73.3" rx="1.5"/><rect class="b50" x="216.0" y="49.2" width="8.0" height="26.8" rx="1.5"/></g><polyline class="px" points="6.0,52.3 29.8,60.1 53.6,62.8 124.9,50.6 148.7,53.8 172.4,43.4 196.2,44.1 220.0,42.0"/><circle class="hitpt" cx="172.4" cy="43.4" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="44.1" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="42.0" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>AMD<span>90% 안 2/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="AMD 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">334</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">585</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 410.19–577.85 · 50% 458.00–520.70
+실제 552.90 (90% 안)</title><rect class="b90" x="168.4" y="13.8" width="8.0" height="58.5" rx="1.5"/><rect class="b50" x="168.4" y="33.8" width="8.0" height="21.9" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 334.48–483.01 · 50% 376.84–430.11
+실제 585.30 (90% 밖)</title><rect class="b90" x="192.2" y="46.9" width="8.0" height="51.8" rx="1.5"/><rect class="b50" x="192.2" y="65.4" width="8.0" height="18.6" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 367.53–538.26 · 50% 416.73–477.75
+실제 534.06 (90% 안)</title><rect class="b90" x="216.0" y="27.7" width="8.0" height="59.6" rx="1.5"/><rect class="b50" x="216.0" y="48.8" width="8.0" height="21.3" rx="1.5"/></g><polyline class="px" points="6.0,44.9 29.8,74.4 53.6,58.8 124.9,38.0 148.7,35.7 172.4,22.6 196.2,11.3 220.0,29.1"/><circle class="hitpt" cx="172.4" cy="22.6" r="3.2" pointer-events="none"/><circle class="misspt" cx="196.2" cy="11.3" r="4.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="29.1" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>AMZN<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="AMZN 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">232</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">298</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 237.81–297.51 · 50% 255.41–276.68
+실제 266.17 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.2" width="8.0" height="79.8" rx="1.5"/><rect class="b50" x="168.4" y="39.1" width="8.0" height="28.4" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 232.05–289.45 · 50% 249.78–270.44
+실제 267.44 (50%·90% 안)</title><rect class="b90" x="192.2" y="22.0" width="8.0" height="76.7" rx="1.5"/><rect class="b50" x="192.2" y="47.4" width="8.0" height="27.6" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 234.40–285.27 · 50% 250.18–268.18
+실제 266.66 (50%·90% 안)</title><rect class="b90" x="216.0" y="27.6" width="8.0" height="68.0" rx="1.5"/><rect class="b50" x="216.0" y="50.4" width="8.0" height="24.1" rx="1.5"/></g><polyline class="px" points="6.0,53.3 29.8,61.1 53.6,62.3 124.9,52.1 148.7,46.9 172.4,53.1 196.2,51.4 220.0,52.5"/><circle class="hitpt" cx="172.4" cy="53.1" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="51.4" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="52.5" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>AVGO<span>90% 안 1/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="AVGO 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">241</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">364</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 294.95–359.25 · 50% 313.84–338.54
+실제 345.22 (90% 안)</title><rect class="b90" x="168.4" y="14.9" width="8.0" height="45.4" rx="1.5"/><rect class="b50" x="168.4" y="29.5" width="8.0" height="17.5" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 241.01–348.37 · 50% 272.41–309.21
+실제 364.36 (90% 밖)</title><rect class="b90" x="192.2" y="22.5" width="8.0" height="75.8" rx="1.5"/><rect class="b50" x="192.2" y="50.2" width="8.0" height="26.0" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 251.31–338.40 · 50% 278.31–307.77
+실제 347.01 (90% 밖)</title><rect class="b90" x="216.0" y="29.6" width="8.0" height="61.5" rx="1.5"/><rect class="b50" x="216.0" y="51.2" width="8.0" height="20.8" rx="1.5"/></g><polyline class="px" points="6.0,38.7 29.8,62.7 53.6,61.2 124.9,43.0 148.7,34.1 172.4,24.8 196.2,11.3 220.0,23.5"/><circle class="hitpt" cx="172.4" cy="24.8" r="3.2" pointer-events="none"/><circle class="misspt" cx="196.2" cy="11.3" r="4.2" pointer-events="none"/><circle class="misspt" cx="220.0" cy="23.5" r="4.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>BRK-B<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="BRK-B 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.7" y2="98.7" stroke="var(--grid)"/><text x="224" y="102.7" font-size="10" fill="var(--muted)">540</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">619</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 541.27–619.31 · 50% 566.64–592.56
+실제 588.24 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.3" width="8.0" height="86.4" rx="1.5"/><rect class="b50" x="168.4" y="40.9" width="8.0" height="28.7" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 540.37–607.19 · 50% 561.00–584.82
+실제 589.83 (90% 안)</title><rect class="b90" x="192.2" y="24.7" width="8.0" height="74.0" rx="1.5"/><rect class="b50" x="192.2" y="49.4" width="8.0" height="26.4" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 543.38–601.18 · 50% 560.83–582.13
+실제 592.94 (90% 안)</title><rect class="b90" x="216.0" y="31.3" width="8.0" height="64.0" rx="1.5"/><rect class="b50" x="216.0" y="52.4" width="8.0" height="23.6" rx="1.5"/></g><polyline class="px" points="6.0,55.8 29.8,63.3 53.6,64.8 124.9,60.0 148.7,51.1 172.4,45.6 196.2,43.9 220.0,40.4"/><circle class="hitpt" cx="172.4" cy="45.6" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="43.9" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="40.4" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>COST<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="COST 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">984</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">1,127</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 987.44–1,109.05 · 50% 1,024.49–1,068.62
+실제 1,087.61 (90% 안)</title><rect class="b90" x="168.4" y="22.4" width="8.0" height="74.4" rx="1.5"/><rect class="b50" x="168.4" y="47.1" width="8.0" height="27.0" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 1,005.44–1,127.25 · 50% 1,042.38–1,087.05
+실제 1,092.21 (90% 안)</title><rect class="b90" x="192.2" y="11.2" width="8.0" height="74.6" rx="1.5"/><rect class="b50" x="192.2" y="35.9" width="8.0" height="27.3" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 997.85–1,110.81 · 50% 1,031.68–1,075.23
+실제 1,106.21 (90% 안)</title><rect class="b90" x="216.0" y="21.3" width="8.0" height="69.1" rx="1.5"/><rect class="b50" x="216.0" y="43.1" width="8.0" height="26.7" rx="1.5"/></g><polyline class="px" points="6.0,60.7 29.8,49.0 53.6,56.4 124.9,48.6 148.7,48.7 172.4,35.5 196.2,32.7 220.0,24.1"/><circle class="hitpt" cx="172.4" cy="35.5" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="32.7" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="24.1" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>GOOGL<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="GOOGL 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">257</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">315</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 264.18–315.16 · 50% 279.46–298.35
+실제 293.45 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.2" width="8.0" height="76.6" rx="1.5"/><rect class="b50" x="168.4" y="36.5" width="8.0" height="28.4" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 257.00–309.46 · 50% 273.21–291.42
+실제 298.70 (90% 안)</title><rect class="b90" x="192.2" y="19.8" width="8.0" height="78.8" rx="1.5"/><rect class="b50" x="192.2" y="46.9" width="8.0" height="27.4" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 260.29–310.11 · 50% 275.80–293.80
+실제 295.77 (90% 안)</title><rect class="b90" x="216.0" y="18.8" width="8.0" height="74.8" rx="1.5"/><rect class="b50" x="216.0" y="43.3" width="8.0" height="27.0" rx="1.5"/></g><polyline class="px" points="6.0,50.6 29.8,60.2 53.6,56.9 124.9,51.8 148.7,53.0 172.4,43.9 196.2,36.0 220.0,40.4"/><circle class="hitpt" cx="172.4" cy="43.9" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="36.0" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="40.4" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>JPM<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="JPM 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">312</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">375</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 329.33–374.81 · 50% 343.78–360.25
+실제 343.39 (90% 안)</title><rect class="b90" x="168.4" y="12.0" width="8.0" height="62.3" rx="1.5"/><rect class="b50" x="168.4" y="32.0" width="8.0" height="22.6" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 312.57–363.13 · 50% 328.37–346.41
+실제 342.82 (50%·90% 안)</title><rect class="b90" x="192.2" y="28.1" width="8.0" height="69.3" rx="1.5"/><rect class="b50" x="192.2" y="51.0" width="8.0" height="24.7" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 312.20–356.22 · 50% 325.91–342.46
+실제 346.19 (90% 안)</title><rect class="b90" x="216.0" y="37.5" width="8.0" height="60.3" rx="1.5"/><rect class="b50" x="216.0" y="56.4" width="8.0" height="22.7" rx="1.5"/></g><polyline class="px" points="6.0,43.2 29.8,63.4 53.6,67.3 124.9,56.9 148.7,56.9 172.4,55.1 196.2,55.9 220.0,51.3"/><circle class="hitpt" cx="172.4" cy="55.1" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="55.9" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="51.3" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>KO<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="KO 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.7" y2="98.7" stroke="var(--grid)"/><text x="224" y="102.7" font-size="10" fill="var(--muted)">91</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">100</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 91.51–100.39 · 50% 94.22–97.52
+실제 97.57 (90% 안)</title><rect class="b90" x="168.4" y="11.4" width="8.0" height="85.9" rx="1.5"/><rect class="b50" x="168.4" y="39.2" width="8.0" height="31.9" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 91.49–100.23 · 50% 94.19–97.43
+실제 97.44 (90% 안)</title><rect class="b90" x="192.2" y="13.0" width="8.0" height="84.5" rx="1.5"/><rect class="b50" x="192.2" y="40.0" width="8.0" height="31.3" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 91.64–99.95 · 50% 94.23–97.30
+실제 99.25 (90% 안)</title><rect class="b90" x="216.0" y="15.7" width="8.0" height="80.4" rx="1.5"/><rect class="b50" x="216.0" y="41.3" width="8.0" height="29.7" rx="1.5"/></g><polyline class="px" points="6.0,55.8 29.8,56.5 53.6,57.1 124.9,53.6 148.7,45.1 172.4,38.7 196.2,39.9 220.0,22.4"/><circle class="hitpt" cx="172.4" cy="38.7" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="39.9" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="22.4" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>LLY<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="LLY 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">1,244</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">1,522</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 1,311.85–1,521.91 · 50% 1,382.09–1,450.88
+실제 1,435.55 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.2" width="8.0" height="66.1" rx="1.5"/><rect class="b50" x="168.4" y="33.6" width="8.0" height="21.6" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 1,249.09–1,480.64 · 50% 1,321.84–1,403.98
+실제 1,425.55 (90% 안)</title><rect class="b90" x="192.2" y="24.2" width="8.0" height="72.8" rx="1.5"/><rect class="b50" x="192.2" y="48.3" width="8.0" height="25.8" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 1,243.77–1,465.89 · 50% 1,313.34–1,391.81
+실제 1,443.50 (90% 안)</title><rect class="b90" x="216.0" y="28.9" width="8.0" height="69.9" rx="1.5"/><rect class="b50" x="216.0" y="52.2" width="8.0" height="24.7" rx="1.5"/></g><polyline class="px" points="6.0,44.5 29.8,61.2 53.6,64.6 124.9,46.4 148.7,40.0 172.4,38.4 196.2,41.6 220.0,35.9"/><circle class="hitpt" cx="172.4" cy="38.4" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="41.6" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="35.9" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>META<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="META 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.7" y2="98.7" stroke="var(--grid)"/><text x="224" y="102.7" font-size="10" fill="var(--muted)">538</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">693</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 571.89–691.01 · 50% 610.70–650.63
+실제 628.77 (50%·90% 안)</title><rect class="b90" x="168.4" y="12.6" width="8.0" height="67.1" rx="1.5"/><rect class="b50" x="168.4" y="35.3" width="8.0" height="22.5" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 540.06–674.99 · 50% 580.12–629.27
+실제 623.61 (50%·90% 안)</title><rect class="b90" x="192.2" y="21.6" width="8.0" height="76.1" rx="1.5"/><rect class="b50" x="192.2" y="47.4" width="8.0" height="27.7" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 547.42–679.54 · 50% 586.53–633.63
+실제 641.69 (90% 안)</title><rect class="b90" x="216.0" y="19.0" width="8.0" height="74.5" rx="1.5"/><rect class="b50" x="216.0" y="44.9" width="8.0" height="26.6" rx="1.5"/></g><polyline class="px" points="6.0,47.0 29.8,61.0 53.6,58.2 124.9,40.6 148.7,40.5 172.4,47.7 196.2,50.6 220.0,40.4"/><circle class="hitpt" cx="172.4" cy="47.7" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="50.6" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="40.4" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>MSFT<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="MSFT 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.7" y2="98.7" stroke="var(--grid)"/><text x="224" y="102.7" font-size="10" fill="var(--muted)">476</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">623</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 493.90–622.14 · 50% 533.83–577.54
+실제 521.13 (90% 안)</title><rect class="b90" x="168.4" y="12.0" width="8.0" height="76.0" rx="1.5"/><rect class="b50" x="168.4" y="38.4" width="8.0" height="25.9" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 475.80–600.02 · 50% 513.87–557.41
+실제 523.00 (50%·90% 안)</title><rect class="b90" x="192.2" y="25.1" width="8.0" height="73.6" rx="1.5"/><rect class="b50" x="192.2" y="50.4" width="8.0" height="25.8" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 479.72–581.08 · 50% 512.69–547.87
+실제 523.88 (50%·90% 안)</title><rect class="b90" x="216.0" y="36.3" width="8.0" height="60.1" rx="1.5"/><rect class="b50" x="216.0" y="56.0" width="8.0" height="20.9" rx="1.5"/></g><polyline class="px" points="6.0,51.3 29.8,63.1 53.6,66.3 124.9,57.6 148.7,64.8 172.4,71.9 196.2,70.8 220.0,70.3"/><circle class="hitpt" cx="172.4" cy="71.9" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="70.8" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="70.3" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>NFLX<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="NFLX 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">57</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">73</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 60.27–72.95 · 50% 64.20–68.63
+실제 64.54 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.3" width="8.0" height="69.7" rx="1.5"/><rect class="b50" x="168.4" y="35.0" width="8.0" height="24.3" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 59.55–71.99 · 50% 63.41–67.70
+실제 62.69 (90% 안)</title><rect class="b90" x="192.2" y="16.5" width="8.0" height="68.4" rx="1.5"/><rect class="b50" x="192.2" y="40.1" width="8.0" height="23.6" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 57.12–70.13 · 50% 61.15–65.71
+실제 62.15 (50%·90% 안)</title><rect class="b90" x="216.0" y="26.8" width="8.0" height="71.5" rx="1.5"/><rect class="b50" x="216.0" y="51.0" width="8.0" height="25.1" rx="1.5"/></g><polyline class="px" points="6.0,47.3 29.8,51.9 53.6,63.7 124.9,60.7 148.7,64.5 172.4,57.5 196.2,67.7 220.0,70.6"/><circle class="hitpt" cx="172.4" cy="57.5" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="67.7" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="70.6" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>NVDA<span>90% 안 2/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="NVDA 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">155</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">220</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 182.06–219.64 · 50% 193.16–207.58
+실제 173.73 (90% 밖)</title><rect class="b90" x="168.4" y="11.6" width="8.0" height="50.5" rx="1.5"/><rect class="b50" x="168.4" y="27.8" width="8.0" height="19.4" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 154.82–210.12 · 50% 171.17–191.50
+실제 166.19 (90% 안)</title><rect class="b90" x="192.2" y="24.4" width="8.0" height="74.4" rx="1.5"/><rect class="b50" x="192.2" y="49.4" width="8.0" height="27.3" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 160.58–214.13 · 50% 176.50–196.53
+실제 162.85 (90% 안)</title><rect class="b90" x="216.0" y="19.0" width="8.0" height="72.0" rx="1.5"/><rect class="b50" x="216.0" y="42.7" width="8.0" height="26.9" rx="1.5"/></g><polyline class="px" points="6.0,37.8 29.8,62.7 53.6,56.0 124.9,66.7 148.7,79.8 172.4,73.3 196.2,83.5 220.0,88.0"/><circle class="misspt" cx="172.4" cy="73.3" r="4.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="83.5" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="88.0" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>PFE<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="PFE 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">27</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">32</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 28.52–32.22 · 50% 29.67–31.01
+실제 29.45 (90% 안)</title><rect class="b90" x="168.4" y="11.6" width="8.0" height="66.2" rx="1.5"/><rect class="b50" x="168.4" y="33.3" width="8.0" height="23.8" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 27.37–31.62 · 50% 28.69–30.22
+실제 28.83 (50%·90% 안)</title><rect class="b90" x="192.2" y="22.5" width="8.0" height="75.9" rx="1.5"/><rect class="b50" x="192.2" y="47.4" width="8.0" height="27.4" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 27.55–31.31 · 50% 28.71–30.08
+실제 28.89 (50%·90% 안)</title><rect class="b90" x="216.0" y="27.9" width="8.0" height="67.2" rx="1.5"/><rect class="b50" x="216.0" y="49.9" width="8.0" height="24.5" rx="1.5"/></g><polyline class="px" points="6.0,45.1 29.8,61.1 53.6,62.2 124.9,65.1 148.7,62.8 172.4,61.1 196.2,72.2 220.0,71.2"/><circle class="hitpt" cx="172.4" cy="61.1" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="72.2" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="71.2" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>TSLA<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="TSLA 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">288</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">429</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 345.18–429.48 · 50% 370.12–401.44
+실제 390.84 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.2" width="8.0" height="52.2" rx="1.5"/><rect class="b50" x="168.4" y="28.6" width="8.0" height="19.4" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 288.42–406.31 · 50% 321.94–365.29
+실제 397.45 (90% 안)</title><rect class="b90" x="192.2" y="25.6" width="8.0" height="73.0" rx="1.5"/><rect class="b50" x="192.2" y="51.0" width="8.0" height="26.8" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 302.88–417.84 · 50% 336.84–379.09
+실제 390.22 (90% 안)</title><rect class="b90" x="216.0" y="18.5" width="8.0" height="71.2" rx="1.5"/><rect class="b50" x="216.0" y="42.4" width="8.0" height="26.2" rx="1.5"/></g><polyline class="px" points="6.0,38.7 29.8,64.4 53.6,55.4 124.9,43.1 148.7,42.0 172.4,35.2 196.2,31.1 220.0,35.6"/><circle class="hitpt" cx="172.4" cy="35.2" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="31.1" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="35.6" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>UNH<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="UNH 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">366</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">438</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 383.05–437.80 · 50% 400.09–419.33
+실제 402.94 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.2" width="8.0" height="67.0" rx="1.5"/><rect class="b50" x="168.4" y="33.8" width="8.0" height="23.5" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 366.25–426.84 · 50% 385.02–406.38
+실제 405.13 (50%·90% 안)</title><rect class="b90" x="192.2" y="24.7" width="8.0" height="74.1" rx="1.5"/><rect class="b50" x="192.2" y="49.7" width="8.0" height="26.1" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 366.84–423.48 · 50% 384.06–404.47
+실제 407.46 (90% 안)</title><rect class="b90" x="216.0" y="28.8" width="8.0" height="69.3" rx="1.5"/><rect class="b50" x="216.0" y="52.0" width="8.0" height="25.0" rx="1.5"/></g><polyline class="px" points="6.0,46.0 29.8,62.7 53.6,64.6 124.9,60.4 148.7,51.2 172.4,53.9 196.2,51.2 220.0,48.4"/><circle class="hitpt" cx="172.4" cy="53.9" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="51.2" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="48.4" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>V<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="V 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.8" y2="98.8" stroke="var(--grid)"/><text x="224" y="102.8" font-size="10" fill="var(--muted)">383</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">470</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 402.49–469.80 · 50% 424.29–446.99
+실제 425.55 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.5" width="8.0" height="67.4" rx="1.5"/><rect class="b50" x="168.4" y="34.4" width="8.0" height="22.7" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 382.66–461.84 · 50% 408.26–434.55
+실제 420.31 (50%·90% 안)</title><rect class="b90" x="192.2" y="19.5" width="8.0" height="79.3" rx="1.5"/><rect class="b50" x="192.2" y="46.8" width="8.0" height="26.3" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 389.69–453.88 · 50% 411.33–432.52
+실제 425.76 (50%·90% 안)</title><rect class="b90" x="216.0" y="27.5" width="8.0" height="64.2" rx="1.5"/><rect class="b50" x="216.0" y="48.8" width="8.0" height="21.2" rx="1.5"/></g><polyline class="px" points="6.0,45.6 29.8,59.6 53.6,59.5 124.9,60.0 148.7,58.4 172.4,55.8 196.2,61.1 220.0,55.6"/><circle class="hitpt" cx="172.4" cy="55.8" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="61.1" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="55.6" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>WMT<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="WMT 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.7" y2="98.7" stroke="var(--grid)"/><text x="224" y="102.7" font-size="10" fill="var(--muted)">118</text><line x1="6" x2="220" y1="11.2" y2="11.2" stroke="var(--grid)"/><text x="224" y="15.2" font-size="10" fill="var(--muted)">139</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 120.12–138.77 · 50% 126.20–132.42
+실제 125.67 (90% 안)</title><rect class="b90" x="168.4" y="11.8" width="8.0" height="78.0" rx="1.5"/><rect class="b50" x="168.4" y="38.4" width="8.0" height="26.0" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 119.80–136.37 · 50% 124.93–130.71
+실제 126.19 (50%·90% 안)</title><rect class="b90" x="192.2" y="21.9" width="8.0" height="69.2" rx="1.5"/><rect class="b50" x="192.2" y="45.5" width="8.0" height="24.1" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 117.97–133.83 · 50% 122.78–128.45
+실제 128.09 (50%·90% 안)</title><rect class="b90" x="216.0" y="32.5" width="8.0" height="66.3" rx="1.5"/><rect class="b50" x="216.0" y="55.0" width="8.0" height="23.7" rx="1.5"/></g><polyline class="px" points="6.0,51.9 29.8,58.0 53.6,67.2 124.9,66.6 148.7,67.1 172.4,66.6 196.2,64.4 220.0,56.5"/><circle class="hitpt" cx="172.4" cy="66.6" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="64.4" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="56.5" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div><div class="sm"><h3>XOM<span>90% 안 3/3</span></h3><svg viewBox="0 0 260 120" role="img" aria-label="XOM 예측 범위와 실제 주가" style="width:100%;height:auto"><line x1="6" x2="220" y1="98.7" y2="98.7" stroke="var(--grid)"/><text x="224" y="102.7" font-size="10" fill="var(--muted)">150</text><line x1="6" x2="220" y1="11.3" y2="11.3" stroke="var(--grid)"/><text x="224" y="15.3" font-size="10" fill="var(--muted)">185</text><g class="hov"><title>2026-11-04 예측 → 2026-11-11 (1주)
+90% 154.52–185.20 · 50% 163.94–174.82
+실제 166.71 (50%·90% 안)</title><rect class="b90" x="168.4" y="11.3" width="8.0" height="77.2" rx="1.5"/><rect class="b50" x="168.4" y="37.4" width="8.0" height="27.4" rx="1.5"/></g><g class="hov"><title>2026-11-05 예측 → 2026-11-12 (1주)
+90% 150.42–180.63 · 50% 159.93–170.46
+실제 169.78 (50%·90% 안)</title><rect class="b90" x="192.2" y="22.7" width="8.0" height="76.0" rx="1.5"/><rect class="b50" x="192.2" y="48.3" width="8.0" height="26.5" rx="1.5"/></g><g class="hov"><title>2026-11-06 예측 → 2026-11-13 (1주)
+90% 153.52–179.45 · 50% 161.13–170.90
+실제 170.59 (50%·90% 안)</title><rect class="b90" x="216.0" y="25.7" width="8.0" height="65.2" rx="1.5"/><rect class="b50" x="216.0" y="47.2" width="8.0" height="24.6" rx="1.5"/></g><polyline class="px" points="6.0,51.3 29.8,61.3 53.6,59.9 124.9,62.7 148.7,63.4 172.4,57.8 196.2,50.0 220.0,48.0"/><circle class="hitpt" cx="172.4" cy="57.8" r="3.2" pointer-events="none"/><circle class="hitpt" cx="196.2" cy="50.0" r="3.2" pointer-events="none"/><circle class="hitpt" cx="220.0" cy="48.0" r="3.2" pointer-events="none"/><text x="6" y="117" font-size="10" fill="var(--muted)">11-04</text><text x="220" y="117" font-size="10" fill="var(--muted)" text-anchor="end">11-13</text></svg></div></div></section><section class="card"><h2>종목별 요약</h2><div class="scroll"><table class="tr"><thead><tr><th class="l">종목</th><th>평가 수</th><th>50% 적중</th><th>90% 적중</th><th>평균 PIT</th><th>마지막 평가일</th></tr></thead><tbody><tr><td class="l">AAPL</td><td>7</td><td>43%</td><td>100%</td><td>0.74</td><td>2026-11-13</td></tr><tr><td class="l">AMD</td><td>6</td><td>0%</td><td>67%</td><td>0.94</td><td>2026-11-13</td></tr><tr><td class="l">AMZN</td><td>6</td><td>100%</td><td>100%</td><td>0.64</td><td>2026-11-13</td></tr><tr><td class="l">AVGO</td><td>6</td><td>0%</td><td>33%</td><td>0.93</td><td>2026-11-13</td></tr><tr><td class="l">BRK-B</td><td>6</td><td>33%</td><td>100%</td><td>0.80</td><td>2026-11-13</td></tr><tr><td class="l">COST</td><td>6</td><td>0%</td><td>100%</td><td>0.87</td><td>2026-11-13</td></tr><tr><td class="l">GOOGL</td><td>6</td><td>33%</td><td>100%</td><td>0.76</td><td>2026-11-13</td></tr><tr><td class="l">JPM</td><td>6</td><td>33%</td><td>100%</td><td>0.58</td><td>2026-11-13</td></tr><tr><td class="l">KO</td><td>6</td><td>0%</td><td>100%</td><td>0.81</td><td>2026-11-13</td></tr><tr><td class="l">LLY</td><td>6</td><td>33%</td><td>100%</td><td>0.80</td><td>2026-11-13</td></tr><tr><td class="l">META</td><td>6</td><td>67%</td><td>100%</td><td>0.66</td><td>2026-11-13</td></tr><tr><td class="l">MSFT</td><td>6</td><td>67%</td><td>100%</td><td>0.30</td><td>2026-11-13</td></tr><tr><td class="l">NFLX</td><td>6</td><td>67%</td><td>100%</td><td>0.28</td><td>2026-11-13</td></tr><tr><td class="l">NVDA</td><td>7</td><td>0%</td><td>57%</td><td>0.08</td><td>2026-11-13</td></tr><tr><td class="l">PFE</td><td>6</td><td>67%</td><td>100%</td><td>0.27</td><td>2026-11-13</td></tr><tr><td class="l">TSLA</td><td>7</td><td>43%</td><td>100%</td><td>0.76</td><td>2026-11-13</td></tr><tr><td class="l">UNH</td><td>6</td><td>67%</td><td>100%</td><td>0.62</td><td>2026-11-13</td></tr><tr><td class="l">V</td><td>6</td><td>100%</td><td>100%</td><td>0.45</td><td>2026-11-13</td></tr><tr><td class="l">WMT</td><td>6</td><td>67%</td><td>100%</td><td>0.43</td><td>2026-11-13</td></tr><tr><td class="l">XOM</td><td>6</td><td>100%</td><td>100%</td><td>0.61</td><td>2026-11-13</td></tr></tbody></table></div></section>
+<footer class="foot">※ 본 결과는 과거 가격 통계와 가정된 시나리오에 기반한 확률적 시뮬레이션이며, 실적·뉴스·거시 이벤트를 직접 반영하지 않습니다. 투자 권유가 아니며 투자 판단의 책임은 본인에게 있습니다.</footer>
+</main>
+</body>
+</html>
