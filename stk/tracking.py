@@ -187,15 +187,15 @@ def render_track(result: TrackResult, log_file: Path) -> str:
     ]
     out.append(_indent(table(["지표", "결과", "이상적 값 / 표본"], rows)))
     out.append("")
-    ev = result.evaluations.sort_values(["as_of", "symbol", "date"]).tail(30)
+    ev = result.evaluations.sort_values(["as_of", "symbol", "horizon", "date"]).tail(30)
     rows = [
-        [r.symbol, r.as_of, r.checkpoint, r.date, pct(r.realized_return), pct(r.median_return),
+        [r.symbol, r.as_of, f"{r.horizon}일", r.checkpoint, r.date, pct(r.realized_return), pct(r.median_return),
          "●" if r.in50 else "○", "●" if r.in90 else "○", f"{r.pit:.2f}"]
         for r in ev.itertuples()
     ]
     out.append("  최근 평가 (최대 30개, ● = 구간 안)")
-    out.append(_indent(table(["종목", "기준일", "체크포인트", "날짜", "실제 수익률", "예측 중앙값", "50%", "90%", "PIT"], rows,
-                             ["left", "left", "left", "left", "right", "right", "center", "center", "right"])))
+    out.append(_indent(table(["종목", "기준일", "예측 기간", "체크포인트", "날짜", "실제 수익률", "예측 중앙값", "50%", "90%", "PIT"], rows,
+                             ["left", "left", "right", "left", "left", "right", "right", "center", "center", "right"])))
     if s["evaluated"] < 30:
         out.append("")
         out.append("  ※ 표본이 적어 아직 통계적으로 의미 있는 평가는 아닙니다. 꾸준히 예측을 기록하면 신뢰도가 쌓입니다.")
