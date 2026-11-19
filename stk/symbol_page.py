@@ -156,6 +156,7 @@ def render_symbol_page(symbol: str, recs: list[dict], track: TrackResult | None,
     recs = sorted(recs, key=lambda r: (r["as_of"], int(r["horizon"])))
     hs = _horizons(recs)
     last = recs[-1]["as_of"]
+    current = [r for r in recs if int(r["horizon"]) in hs]
     days = sorted({r["as_of"] for r in recs})
     legend = "".join(f'<span><i style="background:{SERIES[i % len(SERIES)]}"></i>{e(horizon_label(h))} 예측</span>'
                      for i, h in enumerate(hs))
@@ -183,7 +184,7 @@ def render_symbol_page(symbol: str, recs: list[dict], track: TrackResult | None,
             f'<h1>{e(symbol)} <span class="h-sub">예측 변화 기록</span></h1>'
             f'<p class="meta">기록 {len(days)}일 ({days[0]} ~ {last}) · 생성 {generated:%Y-%m-%d %H:%M}</p></header>'
             + prob + band
-            + f'<section class="card"><h2>날짜별 예측 <span class="h-sub">최근 순 · 괄호 = 기대수익</span></h2>{_table([r for r in recs if int(r['horizon']) in hs], hs)}</section>')
+            + f'<section class="card"><h2>날짜별 예측 <span class="h-sub">최근 순 · 괄호 = 기대수익</span></h2>{_table(current, hs)}</section>')
     return _page(f"{symbol} 예측 기록", body)
 
 
