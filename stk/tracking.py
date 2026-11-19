@@ -161,15 +161,25 @@ def evaluate(records: list[dict], price_loader) -> TrackResult:
     summary = {"records": len(records), "evaluated": int(len(ev)), "pending": int(len(pend))}
     if len(ev):
         finals = ev[ev["final"]]
+        uniq = unique_evaluations(ev)
         summary.update({
-            "coverage50": float(ev["in50"].mean()),
-            "coverage90": float(ev["in90"].mean()),
-            "mean_pit": float(ev["pit"].mean()),
+            "coverage50": float(uniq["in50"].mean()),
+            "coverage90": float(uniq["in90"].mean()),
+            "mean_pit": float(uniq["pit"].mean()),
+            "unique": int(len(uniq)),
             "final_n": int(len(finals)),
             "target_dates": int(ev["date"].nunique()),
             "hit_rate": float(finals["hit"].dropna().mean()) if finals["hit"].notna().any() else float("nan"),
         })
     return TrackResult(ev, pend, summary, {k: v for k, v in cache.items() if v is not None})
+
+
+def unique_evaluations(ev: pd.DataFrame) -> pd.DataFrame:
+    """같은 종목·기준일·평가 날짜를 여러 기간(1개월·6개월)으로 예측했다면 가장 짧은 기간 것 하나만 남깁니다.
+    두 예측의 '1주 뒤' 분포는 거의 같아서, 둘 다 세면 표본이 두 배로 부풀어 보입니다."""
+    if ev is None or ev.empty:
+        return ev
+    return ev.sort_values("horizon", kind="stable").drop_duplicates(["symbol", "as_of", "date"]).sort_index()
 
 
 def breakdown(ev: pd.DataFrame) -> pd.DataFrame:
@@ -206,6 +216,8 @@ def render_track(result: TrackResult, log_file: Path) -> str:
     s = result.summary
     out = ["═" * 78, "  예측 기록 실전 성과 추적", "═" * 78, f"기록 파일: {log_file}"]
     out.append(f"기록 {s['records']}건 · 평가된 체크포인트 {s['evaluated']}개 · 대기 중 {s['pending']}개")
+    if s.get("unique") and s["unique"] != s["evaluated"]:
+        out.append(f"요약 지표는 기간만 다른 같은 평가를 한 번씩 센 {s['unique']}개 기준입니다.")
     if not s["evaluated"]:
         out.append("")
         out.append("아직 날짜가 지난 체크포인트가 없습니다. 예측 후 1주 이상 지나면 평가할 수 있습니다.")

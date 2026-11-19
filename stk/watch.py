@@ -73,6 +73,7 @@ class WatchItem:
     report: str | None      # 개별 HTML 리포트 파일명
     error: str | None = None
     history: list[float] | None = None
+    patched: bool = False   # 마지막 하루를 Yahoo 시세 요약(meta)으로 채움 (data._patch_from_meta)
 
 
 def _forecast_one(symbol: str, opts: dict) -> WatchItem:
@@ -91,9 +92,17 @@ def _forecast_one(symbol: str, opts: dict) -> WatchItem:
         (out / name).write_text(render_html(fc, prices), encoding="utf-8")
         hist = prices["adj_close"].dropna().iloc[-63:].round(4).tolist()
         fc.mix_samples = None  # 프로세스 간 전송량 절감
-        return WatchItem(symbol, fc, name, history=hist)
+        return WatchItem(symbol, fc, name, history=hist, patched=is_meta_patched(prices))
     except (DataError, ValueError, OSError) as err:
         return WatchItem(symbol, None, None, error=str(err))
+
+
+def is_meta_patched(prices: pd.DataFrame) -> bool:
+    """마지막 행이 meta 로 채운 값인지 (그 행만 시가가 비어 있음 — CSV 캐시를 거쳐도 유지됨)."""
+    if not isinstance(prices, pd.DataFrame) or "open" not in prices or len(prices) < 2:
+        return False
+    o = prices["open"]
+    return bool(pd.isna(o.iloc[-1]) and pd.notna(o.iloc[-2]))
 
 
 def run_watchlist(
@@ -250,7 +259,7 @@ def _sector_cell(fc: Forecast) -> str:
     return f'<span class="sec{weak}" title="{html.escape(title)}">{html.escape(s.etf)} {html.escape(s.name)}{rel}</span>'
 
 
-def _row(item: WatchItem, change: Change | None = None) -> str:
+def _row(item: WatchItem, change: Change | None = None, symbol_href: str | None = None) -> str:
     e = html.escape
     if item.forecast is None:
         msg = (item.error or "").removeprefix(f"{item.symbol}: ")
@@ -271,7 +280,9 @@ def _row(item: WatchItem, change: Change | None = None) -> str:
     var95 = fc.risk.var95 if fc.risk is not None else float("nan")
     cells = [
         (f'<a href="{e(item.report)}">{e(fc.symbol)}</a>'
-         + (f' <span class="dw" title="{e(" / ".join(fc.data_warnings))}" aria-label="데이터 경고">⚠</span>' if fc.data_warnings else ""),
+         + (f' <span class="dw" title="{e(" / ".join(fc.data_warnings))}" aria-label="데이터 경고">⚠</span>' if fc.data_warnings else "")
+         + (f' <a class="hl" href="{e(symbol_href.format(sym=fc.symbol))}" title="날짜별 예측 변화 기록">기록</a>'
+            if symbol_href else ""),
          fc.symbol, "sym"),
         (money(fc.s0), fc.s0, "num"),
         (f'<span class="dir {cls}" title="{e(narrative_text(fc))}"><span aria-hidden="true">{icon}</span> {e(ol.label)}</span>{flow_badge}',
@@ -321,8 +332,10 @@ def render_dashboard(
     changes: dict[str, Change] | None = None,
     track=None,
     nav: list[tuple[str, str, bool]] | None = None,
+    symbol_href: str | None = None,
 ) -> str:
-    """nav: [(라벨, 링크, 현재 페이지 여부)] — 여러 예측 기간 대시보드를 오갈 때 사용."""
+    """nav: [(라벨, 링크, 현재 페이지 여부)] — 여러 예측 기간 대시보드를 오갈 때 사용.
+    symbol_href: 종목별 기록 페이지 링크 형식 (예: '../../symbols/{sym}.html') — 사이트에서만 사용."""
     changes = changes or {}
     ok = [it for it in items if it.forecast is not None]
     nav_html = ""
@@ -335,7 +348,7 @@ def render_dashboard(
     for it in ok:
         counts[DIRECTION[it.forecast.outlook.direction][1]] += 1
     as_of = max((it.forecast.stats.last_date for it in ok), default=None)
-    rows = "".join(_row(it, changes.get(it.symbol)) for it in items)
+    rows = "".join(_row(it, changes.get(it.symbol), symbol_href) for it in items)
     n_flow = sum(1 for c in changes.values() if c.outlook_changed)
     summary = [
         ("분석 종목", f"{len(ok)} / {len(items)}"),
@@ -397,6 +410,7 @@ DASH_CSS = r"""
 #watch td{vertical-align:middle}
 #watch td.sym a{color:var(--text);font-weight:650;text-decoration:none;border-bottom:1px solid var(--axis)}
 #watch td.sym a:hover{border-bottom-color:var(--text)}
+#watch td.sym a.hl{font-weight:400;font-size:11px;color:var(--text2);border:1px solid var(--axis);border-radius:999px;padding:0 6px;margin-left:4px}
 #watch tr.err td{color:var(--muted)}
 .dir{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
 .dw{cursor:help;color:var(--s3);font-size:12px}

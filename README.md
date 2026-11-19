@@ -169,11 +169,15 @@ index.html             첫 화면: 기간별 요약 카드(상승/횡보/하락 
 README.md              기간별 요약표 (GitHub 에서 바로 보임)
 latest/1m/, latest/6m/ 기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
 history/YYYY-MM-DD.md  날짜별 요약 기록 (파일 이름 = 데이터 기준일)
+symbols/<종목>.html    종목별 예측 변화 기록: 상승확률 추이 · 지난 예측 vs 실제 · 날짜별 판정/국면 (symbols/index.html 목록)
 track.html             실전 성과 상세: 기간×체크포인트별 적중률 · PIT 분포 · 종목별 예측 범위 vs 실제 주가 차트
 data/forecasts.jsonl   누적 예측 기록 → 날짜가 지나면 자동으로 실제 주가와 비교 (실전 성과)
-data/latest.json       이번 실행 상태: 기준일 · 기간별 성공 종목 수 · 오류 · 데이터 경고 (점검용)
+data/latest.json       이번 실행 상태: 기준일 · 기간별 성공 종목 수 · 오류 · 데이터 경고 · meta 로 보정한 종목 · 페이지 생성 실패 (점검용)
 alerts.md              흐름 변화·불안 국면 진입·데이터 경고가 있을 때만 생성
 ```
+
+부가 페이지(실전 성과·종목별 기록·지난 기록)를 만들다 오류가 나도 그날 예측 기록과 첫 화면은 먼저 커밋되고,
+실행은 마지막 단계에서 실패로 표시됩니다 (`publish` 종료 코드 3, 내용은 `latest.json` 의 `render_errors`).
 
 실행 화면(Actions → 실행 기록)의 **Summary** 에 요약표가 표시되고, 사이트 전체가 14일간 **Artifact** 로 첨부됩니다.
 
@@ -418,6 +422,7 @@ stk/
   watch.py        관심종목 병렬 예측 + 대시보드 HTML
   publish.py      여러 예측 기간 사이트(첫 화면·기간별 대시보드·README·history·알림) 생성
   tracking.py     예측 기록(JSONL)과 실전 성과 추적
+  symbol_page.py  종목별 예측 변화 기록 페이지(symbols/)
   track_page.py   실전 성과 페이지(track.html): 적중률 표 · PIT 분포 · 종목별 예측 vs 실제 차트
   earnings.py     실적 발표일 추정 (가격·거래량 패턴)
   sector.py       섹터 ETF 판별 · 위험 분해 · 상대 강도

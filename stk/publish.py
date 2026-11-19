@@ -4,6 +4,7 @@
 
 site/
   index.html              첫 화면: 기간별 요약 카드 · 흐름 변화 · 실전 성과
+  symbols/<종목>.html     종목별 예측 변화 기록 (상승확률 추이 · 지난 예측 vs 실제 · 날짜별 표) + symbols/index.html
   track.html              실전 성과 상세: 기간×체크포인트별 적중률 · PIT 분포 · 종목별 예측 vs 실제 차트
   README.md               GitHub 에서 바로 보이는 요약
   latest/<1m|6m>/         기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
@@ -19,6 +20,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +28,7 @@ from pathlib import Path
 from .forecast import horizon_label
 from .html_report import CSS as REPORT_CSS
 from .report import DISCLAIMER, pct
+from .symbol_page import write_symbol_pages
 from .track_page import render_track_page
 from .tracking import TrackResult, append_log, evaluate, load_log
 from .watch import (
@@ -62,6 +65,7 @@ class PublishResult:
     track: TrackResult | None
     alerts: list[str]
     site: Path
+    render_errors: list[str] = field(default_factory=list)   # 부가 페이지 생성 실패 (예측 기록은 저장됨)
 
 
 def _track_for(records: list[dict], horizon: int, loader) -> TrackResult:
@@ -126,7 +130,7 @@ def _landing(runs: list[HorizonRun], track: TrackResult | None, per_h: dict[int,
     if track is not None:
         s = track.summary
         if s.get("evaluated"):
-            track_txt = (f"<p>평가된 체크포인트 {s['evaluated']}개 · 50% 구간 적중 {pct(s['coverage50'], False, 0)} (목표 50%) · "
+            track_txt = (f"<p>평가 {s.get('unique', s['evaluated'])}개 (기간 중복 제외) · 50% 구간 적중 {pct(s['coverage50'], False, 0)} (목표 50%) · "
                          f"90% 구간 적중 {pct(s['coverage90'], False, 0)} (목표 90%) · 평균 PIT {s['mean_pit']:.2f}"
                          + (f" · 만기 방향 적중 {pct(s['hit_rate'], False, 0)} ({s['final_n']}건)" if s.get("final_n") else "")
                          + f" · 서로 다른 평가 날짜 {s.get('target_dates', 0)}일</p>")
@@ -148,7 +152,7 @@ def _landing(runs: list[HorizonRun], track: TrackResult | None, per_h: dict[int,
 </header>
 <div class="hgrid">{''.join(cards)}</div>
 <section class="card"><h2>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h2>{track_txt}<a class="go" href="track.html">자세히 보기 — 종목별 예측 vs 실제 차트 →</a></section>
-<p class="note">지난 기록: <a href="history/index.html">날짜별 요약</a> · 예측 기록: <a href="data/forecasts.jsonl">forecasts.jsonl</a> · 실행 상태: <a href="data/latest.json">latest.json</a></p>
+<p class="note">종목별 기록: <a href="symbols/index.html">예측 변화 추이</a> · 지난 기록: <a href="history/index.html">날짜별 요약</a> · 예측 기록: <a href="data/forecasts.jsonl">forecasts.jsonl</a> · 실행 상태: <a href="data/latest.json">latest.json</a></p>
 <footer class="foot">{e(DISCLAIMER)}</footer>
 </main>
 </body>
@@ -301,9 +305,20 @@ def publish_site(
             append_log(it.forecast, log_path)
         runs.append(run)
 
+    render_errors: list[str] = []
+
+    def guarded(name: str, fn, default=None):
+        """부가 페이지는 실패해도 나머지(특히 예측 기록 커밋)는 계속 진행하고, 실패를 상태 파일에 남김."""
+        try:
+            return fn()
+        except Exception as err:  # noqa: BLE001
+            render_errors.append(f"{name}: {type(err).__name__}: {err}")
+            traceback.print_exc()
+            return default
+
     records = load_log(log_path)
-    track = evaluate(records, loader)
-    per_h = {r.horizon: _track_for(records, r.horizon, loader) for r in runs}
+    track = guarded("실전 성과 평가", lambda: evaluate(records, loader))
+    per_h = {r.horizon: guarded(f"{r.code} 실전 성과", lambda r=r: _track_for(records, r.horizon, loader)) for r in runs}
     nav = [(horizon_label(r.horizon), f"../{r.code}/index.html", False) for r in runs]
     md_parts = []
     for run in runs:
@@ -311,9 +326,9 @@ def publish_site(
             continue
         out = site / "latest" / run.code
         this_nav = [(lbl, href, href == f"../{run.code}/index.html") for lbl, href, _ in nav] + [("처음으로", "../../index.html", False)]
-        (out / "index.html").write_text(
+        guarded(f"{run.code} 대시보드", lambda run=run, out=out, this_nav=this_nav: (out / "index.html").write_text(
             render_dashboard(run.items, run.horizon, generated=generated, changes=run.changes, track=per_h[run.horizon],
-                             nav=this_nav), encoding="utf-8")
+                             nav=this_nav, symbol_href="../../symbols/{sym}.html"), encoding="utf-8"))
         md = render_markdown_summary(run.items, run.horizon, changes=run.changes, track=per_h[run.horizon], generated=generated)
         (out / "summary.md").write_text(md, encoding="utf-8")
         (out / "summary.json").write_text(summary_json(run.items), encoding="utf-8")
@@ -326,7 +341,9 @@ def publish_site(
     ok_dates = [it.forecast.stats.last_date for r in runs for it in r.ok]
     as_of = max(ok_dates) if ok_dates else None
     (site / "index.html").write_text(_landing(runs, track, per_h, generated), encoding="utf-8")
-    (site / "track.html").write_text(render_track_page(track, generated), encoding="utf-8")
+    if track is not None:
+        guarded("실전 성과 페이지", lambda: (site / "track.html").write_text(render_track_page(track, generated, symbol_href="symbols/{sym}.html"), encoding="utf-8"))
+    guarded("종목별 기록 페이지", lambda: write_symbol_pages(site, records, track, symbols, generated))
     readme = "# 관심종목 흐름 예측\n\n" + "\n\n".join(md_parts)
     if alerts:
         readme += "\n\n## 알림\n\n" + "\n".join(f"- {a}" for a in alerts)
@@ -334,13 +351,15 @@ def publish_site(
     (site / "README.md").write_text(readme, encoding="utf-8")
     day = as_of if as_of is not None else generated  # 지연 실행(예: 토요일 새벽)이어도 데이터 날짜로 저장
     (site / "history" / f"{day:%Y-%m-%d}.md").write_text(readme, encoding="utf-8")
-    write_history(site)
+    guarded("지난 기록 페이지", lambda: write_history(site))
     status = {
         "as_of": f"{day:%Y-%m-%d}",
         "generated": generated.isoformat(timespec="seconds"),
         "horizons": {r.code: {"ok": len(r.ok), "total": len(r.items)} for r in runs},
         "errors": [it.error for it in (runs[0].items if runs else []) if it.error],
         "data_warnings": [f"{it.symbol}: {w}" for it in (runs[0].ok if runs else []) for w in it.forecast.data_warnings],
+        "meta_patched": sorted({it.symbol for r in runs for it in r.ok if it.patched}),
+        "render_errors": render_errors,
         "alerts": len(alerts),
     }
     (site / "data" / "latest.json").write_text(json.dumps(status, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -351,4 +370,4 @@ def publish_site(
     elif alert_file.exists():
         alert_file.unlink()
     (site / ".nojekyll").touch()
-    return PublishResult(runs, track, alerts, site)
+    return PublishResult(runs, track, alerts, site, render_errors)

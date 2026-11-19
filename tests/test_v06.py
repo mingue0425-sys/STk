@@ -80,3 +80,67 @@ def test_matured_final_checkpoint_renders_everywhere(tmp_path):
     assert "방향 적중" in render_track(tr, tmp_path / "f.jsonl")
     page = render_track_page(tr)
     assert "만기" in page and page.count('class="sm"') == 2
+
+
+# ---- v0.7: 종목별 기록 페이지 · 부가 페이지 실패 보호 · meta 보정 표시 ----
+
+def _logrec(sym, as_of, horizon, prob, outlook="방향성 약한 횡보 흐름", regime="중간 변동"):
+    r = _record(sym, as_of, horizon, 100.0, "2099-01-01")
+    r.update(prob_up=prob, expected_return=prob - 0.5, outlook=outlook, regime=regime)
+    return r
+
+
+def test_symbol_page_single_record_and_gaps():
+    from stk.symbol_page import render_symbol_index, render_symbol_page
+
+    one = render_symbol_page("AAA", [_logrec("AAA", "2026-11-04", 21, 0.55)], None)
+    assert "AAA" in one and "아직 평가할 날짜가 지나지 않았습니다" in one and "<svg" in one
+    recs = [_logrec("BBB", d, h, p, outlook=o, regime=g) for d, h, p, o, g in [
+        ("2026-11-04", 63, 0.5, "횡보", "중간 변동"),           # 예전 버전 기간: 그리지 않음
+        ("2026-11-05", 21, 0.52, "횡보", "중간 변동"), ("2026-11-05", 126, 0.6, "상승", "중간 변동"),
+        ("2026-11-09", 21, 0.62, "상승", "저변동"), ("2026-11-09", 126, 0.61, "상승", "저변동")]]   # 11-06 빠짐
+    page = render_symbol_page("BBB", recs, None)
+    assert page.count('class="pl"') == 2                      # 21·126일 선만 (63일은 최근 기준일에 없음)
+    assert "판정 변화" in page and "국면 변화" in page and "3개월 판정" not in page
+    assert page.index("2026-11-09") < page.index("2026-11-05")   # 표는 최근 순
+    idx = render_symbol_index({"BBB": recs})
+    assert 'href="BBB.html"' in idx and "1개월 62%" in idx
+
+
+def test_publish_survives_page_failure_and_writes_symbol_pages(tmp_path, monkeypatch):
+    import json
+
+    from stk import publish as pub
+    from tests.conftest import make_prices
+    from tests.test_v05 import _fake_watch
+
+    data = {"AAA": make_prices(seed=1), "BBB": make_prices(seed=2)}
+    _fake_watch(monkeypatch, data)
+    site = tmp_path / "site"
+    res = pub.publish_site(["AAA", "BBB"], site, [21], {"n_paths": 200}, site / "data" / "f.jsonl", lambda s: data[s], jobs=1)
+    assert res.render_errors == []
+    assert (site / "symbols" / "AAA.html").exists() and (site / "symbols" / "index.html").exists()
+    assert 'href="../../symbols/AAA.html"' in (site / "latest/1m/index.html").read_text(encoding="utf-8")
+    assert 'href="symbols/index.html"' in (site / "index.html").read_text(encoding="utf-8")
+
+    def boom(*a, **k):
+        raise RuntimeError("차트 오류")
+    monkeypatch.setattr(pub, "render_track_page", boom)
+    monkeypatch.setattr(pub, "write_symbol_pages", boom)
+    res = pub.publish_site(["AAA", "BBB"], site, [21], {"n_paths": 200}, site / "data" / "f.jsonl", lambda s: data[s], jobs=1)
+    assert len(res.render_errors) == 2 and "차트 오류" in res.render_errors[0]
+    status = json.loads((site / "data" / "latest.json").read_text(encoding="utf-8"))
+    assert len(status["render_errors"]) == 2 and status["meta_patched"] == []
+    assert len((site / "data" / "f.jsonl").read_text(encoding="utf-8").splitlines()) == 2   # 기록은 그대로 저장
+    assert (site / "index.html").exists() and (site / "README.md").exists()
+
+
+def test_meta_patched_marker_survives_csv(tmp_path):
+    from stk.watch import is_meta_patched
+
+    after_close = int(pd.Timestamp("2026-11-13 16:00", tz="America/New_York").timestamp())
+    f = parse_yahoo_chart(_payload(after_close), "META")
+    assert is_meta_patched(f)
+    f.to_csv(tmp_path / "c.csv")
+    assert is_meta_patched(pd.read_csv(tmp_path / "c.csv", index_col="date", parse_dates=["date"]))
+    assert not is_meta_patched(parse_yahoo_chart(_payload(after_close - 86400 * 2), "META"))

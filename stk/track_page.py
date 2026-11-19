@@ -19,7 +19,7 @@ import pandas as pd
 
 from .html_report import CSS as REPORT_CSS
 from .report import DISCLAIMER, pct
-from .tracking import TrackResult, breakdown, by_symbol
+from .tracking import TrackResult, breakdown, by_symbol, unique_evaluations
 from .watch import DASH_CSS
 
 e = html.escape
@@ -46,6 +46,7 @@ table.tr th:first-child,table.tr td:first-child,table.tr td.l,table.tr th.l{text
 .grid-sm{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
 .sm{border:1px solid var(--grid);border-radius:10px;padding:8px 10px 6px;background:var(--surface)}
 .sm h3{margin:0;font-size:14px;display:flex;justify-content:space-between;gap:8px}
+.sm h3 a{color:var(--text);text-decoration:none;border-bottom:1px solid var(--axis)}
 .sm h3 span{font-weight:400;font-size:12px;color:var(--text2)}
 .sm .b90{fill:var(--band);fill-opacity:calc(var(--band90) * 2)}
 .sm .b50{fill:var(--band);fill-opacity:calc(var(--band50) * 2)}
@@ -177,7 +178,8 @@ def _symbol_svg(sym: str, ev: pd.DataFrame, prices: pd.Series | None, width: int
     return "".join(out)
 
 
-def render_track_page(track: TrackResult, generated: datetime | None = None, back: str = "index.html") -> str:
+def render_track_page(track: TrackResult, generated: datetime | None = None, back: str = "index.html",
+                      symbol_href: str | None = None) -> str:
     generated = generated or datetime.now()
     s = track.summary
     ev = track.evaluations
@@ -191,10 +193,7 @@ def render_track_page(track: TrackResult, generated: datetime | None = None, bac
         return _page(head + body)
 
     nd = s.get("target_dates", 0)
-    # 같은 종목·기준일·날짜를 여러 기간으로 예측한 평가는 한 번만 (요약·PIT·종목별 표용)
-    uniq = ev.sort_values("horizon").drop_duplicates(["symbol", "as_of", "date"])
-    s = dict(s, coverage50=float(uniq["in50"].mean()), coverage90=float(uniq["in90"].mean()),
-             mean_pit=float(uniq["pit"].mean()))
+    uniq = unique_evaluations(ev)   # 요약 지표(summary)와 같은 기준
     tiles = "".join([
         _tile("50% 구간 적중률", pct(s["coverage50"], False, 1), "목표 50% — 실제가 예측 범위 가운데 절반 안에 든 비율",
               s["coverage50"], 0.5),
@@ -231,7 +230,8 @@ def render_track_page(track: TrackResult, generated: datetime | None = None, bac
     cards = []
     for symbol, g in sub.groupby("symbol"):
         n90 = g.drop_duplicates("date")["in90"]
-        cards.append(f'<div class="sm"><h3>{e(symbol)}<span>90% 안 {int(n90.sum())}/{len(n90)}</span></h3>'
+        name = (f'<a href="{e(symbol_href.format(sym=symbol))}">{e(symbol)}</a>' if symbol_href else e(symbol))
+        cards.append(f'<div class="sm"><h3>{name}<span>90% 안 {int(n90.sum())}/{len(n90)}</span></h3>'
                      f'{_symbol_svg(symbol, g, track.prices.get(symbol))}</div>')
     key = ('<div class="tkey"><span><i class="k90"></i>90% 범위</span><span><i class="k50"></i>50% 범위</span>'
            '<span><i class="kpx"></i>실제 종가</span><span><i class="kmiss"></i>90% 범위 밖</span></div>')

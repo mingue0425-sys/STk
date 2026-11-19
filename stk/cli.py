@@ -518,6 +518,11 @@ def _cmd_publish(args) -> int:
     if res.alerts:
         print(f"알림 {len(res.alerts)}건 → {Path(args.site) / 'alerts.md'}")
     print(f"사이트: {Path(args.site) / 'index.html'}")
+    if res.render_errors:
+        # 예측·기록·첫 화면은 저장됨 → 자동 실행은 커밋을 마친 뒤 이 코드로 실패 처리 (daily-forecast.yml)
+        for msg in res.render_errors:
+            print(f"[경고] 페이지 생성 실패 — {msg}", file=sys.stderr)
+        return 3
     return 0
 
 
