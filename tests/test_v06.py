@@ -144,3 +144,23 @@ def test_meta_patched_marker_survives_csv(tmp_path):
     f.to_csv(tmp_path / "c.csv")
     assert is_meta_patched(pd.read_csv(tmp_path / "c.csv", index_col="date", parse_dates=["date"]))
     assert not is_meta_patched(parse_yahoo_chart(_payload(after_close - 86400 * 2), "META"))
+
+
+def test_cli_publish_returns_3_when_only_pages_fail(tmp_path, monkeypatch, capsys):
+    from stk import publish as pub
+    from stk.cli import main
+    from tests.conftest import make_prices
+    from tests.test_v05 import _fake_watch
+
+    data = {"AAA": make_prices(seed=1)}
+    _fake_watch(monkeypatch, data)
+    monkeypatch.setattr("stk.cli.get_history", lambda sym, **kw: data[sym])
+
+    def boom(*a, **k):
+        raise RuntimeError("페이지 오류")
+    monkeypatch.setattr(pub, "write_symbol_pages", boom)
+    site = tmp_path / "site"
+    code = main(["publish", "AAA", "--horizons", "1m", "--site", str(site), "--benchmark", "none", "--rf", "0.04",
+                 "--no-market", "-n", "200", "--jobs", "1", "--no-cache"])
+    assert code == 3 and "페이지 생성 실패" in capsys.readouterr().err
+    assert (site / "data" / "forecasts.jsonl").exists() and (site / "index.html").exists()

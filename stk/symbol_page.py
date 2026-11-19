@@ -29,6 +29,7 @@ SERIES = ("var(--s0)", "var(--s1)", "var(--s2)", "var(--s3)")   # 기간 순서�
 
 SYMBOL_CSS = r"""
 .wrap{max-width:1080px}
+.minw{min-width:560px;max-width:720px}  /* 휴대폰에서 글자가 너무 작아지지 않게: 좁으면 가로 스크롤 */
 .pl{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .pt{stroke:var(--surface);stroke-width:2}
 .hv:hover .pt{r:5}
@@ -162,7 +163,7 @@ def render_symbol_page(symbol: str, recs: list[dict], track: TrackResult | None,
                      for i, h in enumerate(hs))
     prob = (f'<section class="card"><h2>상승확률 추이 <span class="h-sub">기준일마다 예측한 만기 시점 상승확률 '
             '(점선 = 50%)</span></h2>'
-            f'<div class="legend">{legend}</div>{_prob_svg(recs, hs)}</section>')
+            f'<div class="legend">{legend}</div><div class="scroll"><div class="minw">{_prob_svg(recs, hs)}</div></div></section>')
     band = ""
     if track is not None and not track.evaluations.empty:
         ev = track.evaluations[track.evaluations["symbol"] == symbol]
@@ -175,7 +176,7 @@ def render_symbol_page(symbol: str, recs: list[dict], track: TrackResult | None,
                     f'90% 범위 안 {int(n90.sum())}/{len(n90)}</span></h2>'
                     '<div class="tkey"><span><i class="k90"></i>90% 범위</span><span><i class="k50"></i>50% 범위</span>'
                     '<span><i class="kpx"></i>실제 종가</span><span><i class="kmiss"></i>90% 범위 밖</span></div>'
-                    f'<div class="sm big" style="max-width:720px">{_symbol_svg(symbol, sub, track.prices.get(symbol), width=680, height=220)}</div></section>')
+                    f'<div class="scroll"><div class="sm big minw">{_symbol_svg(symbol, sub, track.prices.get(symbol), width=680, height=220)}</div></div></section>')
     if not band:
         band = ('<section class="card"><h2>지난 예측 vs 실제</h2><p class="note">아직 평가할 날짜가 지나지 않았습니다 '
                 '(예측 후 1주 뒤부터 표시).</p></section>')
