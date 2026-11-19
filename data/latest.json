@@ -1,6 +1,6 @@
 {
- "as_of": "2026-11-18",
- "generated": "2026-11-19T03:39:32",
+ "as_of": "2026-11-19",
+ "generated": "2026-11-19T23:42:08",
  "horizons": {
   "1m": {
    "ok": 20,
@@ -13,5 +13,7 @@
  },
  "errors": [],
  "data_warnings": [],
+ "meta_patched": [],
+ "render_errors": [],
  "alerts": 0
 }

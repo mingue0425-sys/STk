@@ -105,6 +105,7 @@ ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0;color:var(--text)}
 #watch td{vertical-align:middle}
 #watch td.sym a{color:var(--text);font-weight:650;text-decoration:none;border-bottom:1px solid var(--axis)}
 #watch td.sym a:hover{border-bottom-color:var(--text)}
+#watch td.sym a.hl{font-weight:400;font-size:11px;color:var(--text2);border:1px solid var(--axis);border-radius:999px;padding:0 6px;margin-left:4px}
 #watch tr.err td{color:var(--muted)}
 .dir{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
 .dw{cursor:help;color:var(--s3);font-size:12px}
@@ -137,7 +138,7 @@ ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0;color:var(--text)}
 <main class="wrap">
 <header class="top">
   <h1>관심종목 흐름 예측 <span class="h-sub">시나리오 + 국면 앙상블</span></h1>
-  <p class="meta">기준일 2026-11-18 · 생성 2026-11-19 03:39 · 시장 스트레스 +0.68 (공포/위기) · VIX 24.6</p>
+  <p class="meta">기준일 2026-11-19 · 생성 2026-11-19 23:42 · 시장 스트레스 +0.83 (공포/위기) · VIX 28.4</p>
 </header>
 <div class="hgrid">
 <a class="card hcard" href="latest/1m/index.html">
@@ -147,23 +148,23 @@ ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0;color:var(--text)}
     <div class="kpi"><div class="kpi-label">횡보</div><div class="kpi-value">20</div></div>
     <div class="kpi"><div class="kpi-label">하락 우위</div><div class="kpi-value">0</div></div>
   </div>
-  <p class="lead">상승확률 상위: AAPL 54%, KO 53%, WMT 52%</p>
-  <p class="note">직전 대비 흐름 변화 없음 · 실전 성과: 평가 119개 · 90% 적중 95%</p>
+  <p class="lead">상승확률 상위: AAPL 54%, WMT 52%, BRK-B 52%</p>
+  <p class="note">직전 대비 흐름 변화 없음 · 실전 성과: 평가 139개 · 90% 적중 94%</p>
   <span class="go">대시보드 열기 →</span>
 </a>
 <a class="card hcard" href="latest/6m/index.html">
   <h2>6개월 전망 <span class="h-sub">126거래일 · 20종목</span></h2>
   <div class="kpis three">
-    <div class="kpi"><div class="kpi-label">상승 우위</div><div class="kpi-value">4</div></div>
-    <div class="kpi"><div class="kpi-label">횡보</div><div class="kpi-value">16</div></div>
+    <div class="kpi"><div class="kpi-label">상승 우위</div><div class="kpi-value">3</div></div>
+    <div class="kpi"><div class="kpi-label">횡보</div><div class="kpi-value">17</div></div>
     <div class="kpi"><div class="kpi-label">하락 우위</div><div class="kpi-value">0</div></div>
   </div>
-  <p class="lead">상승확률 상위: JPM 55%, KO 55%, BRK-B 55%</p>
-  <p class="note">직전 대비 흐름 변화 없음 · 실전 성과: 평가 119개 · 90% 적중 96%</p>
+  <p class="lead">상승확률 상위: BRK-B 56%, JPM 55%, KO 55%</p>
+  <p class="note">직전 대비 흐름 변화 없음 · 실전 성과: 평가 139개 · 90% 적중 94%</p>
   <span class="go">대시보드 열기 →</span>
 </a></div>
-<section class="card"><h2>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h2><p>평가된 체크포인트 241개 · 50% 구간 적중 50% (목표 50%) · 90% 구간 적중 95% (목표 90%) · 평균 PIT 0.52 · 서로 다른 평가 날짜 6일</p><a class="go" href="track.html">자세히 보기 — 종목별 예측 vs 실제 차트 →</a></section>
-<p class="note">지난 기록: <a href="history/index.html">날짜별 요약</a> · 예측 기록: <a href="data/forecasts.jsonl">forecasts.jsonl</a> · 실행 상태: <a href="data/latest.json">latest.json</a></p>
+<section class="card"><h2>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h2><p>평가 139개 (기간 중복 제외) · 50% 구간 적중 45% (목표 50%) · 90% 구간 적중 94% (목표 90%) · 평균 PIT 0.47 · 서로 다른 평가 날짜 7일</p><a class="go" href="track.html">자세히 보기 — 종목별 예측 vs 실제 차트 →</a></section>
+<p class="note">종목별 기록: <a href="symbols/index.html">예측 변화 추이</a> · 지난 기록: <a href="history/index.html">날짜별 요약</a> · 예측 기록: <a href="data/forecasts.jsonl">forecasts.jsonl</a> · 실행 상태: <a href="data/latest.json">latest.json</a></p>
 <footer class="foot">※ 본 결과는 과거 가격 통계와 가정된 시나리오에 기반한 확률적 시뮬레이션이며, 실적·뉴스·거시 이벤트를 직접 반영하지 않습니다. 투자 권유가 아니며 투자 판단의 책임은 본인에게 있습니다.</footer>
 </main>
 </body>
