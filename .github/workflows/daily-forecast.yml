@@ -76,6 +76,9 @@ jobs:
 
       - name: Forecast and build site
         id: publish
+        env:
+          # SEC 공시 조회용 요청자 식별 정보 (저장소 Settings → Secrets → SEC_USER_AGENT). 없으면 공시만 건너뜀
+          STK_SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
           if [ -n "$TICKERS" ]; then
             SRC="${TICKERS//,/ }"

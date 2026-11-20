@@ -213,7 +213,7 @@ def test_cli_publish(tmp_path, monkeypatch, capsys):
     site = tmp_path / "site"
     step = tmp_path / "step.md"
     code = main(["publish", "AAA", "--horizons", "1m,2m", "--site", str(site), "--benchmark", "none", "--rf", "0.04",
-                 "--no-market", "-n", "200", "--jobs", "1", "--no-cache", "--summary-md", str(step)])
+                 "--no-market", "-n", "200", "--jobs", "1", "--no-cache", "--no-news", "--summary-md", str(step)])
     assert code == 0
     assert (site / "latest" / "1m" / "index.html").exists() and (site / "latest" / "42d" / "index.html").exists()
     assert "관심종목 흐름 예측" in step.read_text(encoding="utf-8")

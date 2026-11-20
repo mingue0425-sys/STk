@@ -141,9 +141,30 @@ def _drop_unfinished(frame: pd.DataFrame, meta: dict, tz: str) -> pd.DataFrame:
     if not t or len(frame) < 2:
         return frame
     ts = pd.Timestamp(int(t), unit="s", tz="UTC").tz_convert(tz)
-    if ts.hour < 16 and ts.normalize().tz_localize(None) == frame.index[-1]:
+    if not session_closed(meta, tz) and ts.normalize().tz_localize(None) == frame.index[-1]:
         return frame.iloc[:-1]
     return frame
+
+
+def session_closed(meta: dict, tz: str = "America/New_York") -> bool:
+    """meta 의 마지막 거래 시각(regularMarketTime)이 속한 정규장이 끝났는지.
+
+    Yahoo 가 주는 그날 정규장 종료 시각(currentTradingPeriod.regular.end)을 우선 사용합니다 —
+    추수감사절 다음 날처럼 13:00 에 끝나는 조기 폐장일도 맞게 처리됩니다. 없으면 16:00 뉴욕 시각 기준."""
+    t = meta.get("regularMarketTime")
+    if not t:
+        return True
+    t = int(t)
+    reg = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    start, end = reg.get("start"), reg.get("end")
+    if start and end:
+        day = pd.Timestamp(int(t), unit="s", tz="UTC").tz_convert(tz).normalize()
+        reg_day = pd.Timestamp(int(start), unit="s", tz="UTC").tz_convert(tz).normalize()
+        if reg_day > day:          # 이미 다음 거래일 정보 → 그날 장은 끝남
+            return True
+        if reg_day == day:
+            return t >= int(end) - 60
+    return pd.Timestamp(t, unit="s", tz="UTC").tz_convert(tz).hour >= 16
 
 
 def _patch_from_meta(frame: pd.DataFrame, meta: dict, tz: str) -> pd.DataFrame:
@@ -151,7 +172,7 @@ def _patch_from_meta(frame: pd.DataFrame, meta: dict, tz: str) -> pd.DataFrame:
 
     Yahoo 는 가끔(예: META) 장 마감 후 몇 시간~하루 동안 일봉을 늦게 올리는데, 그때도 meta 의
     regularMarketPrice·고가·저가·거래량은 이미 마감 값입니다. 안전하게 하기 위해
-    ① 장 마감(16:00 뉴욕) 이후 시각이고 ② 마지막 일봉의 바로 다음 평일인 경우에만 채웁니다.
+    ① 그날 정규장이 끝난 뒤이고 (조기 폐장일 포함) ② 마지막 일봉의 바로 다음 평일인 경우에만 채웁니다.
     수정주가는 그날 배당·분할이 없다고 보고 종가와 같게 둡니다 (다음 수신 때 정식 일봉으로 대체됨)."""
     t, price = meta.get("regularMarketTime"), meta.get("regularMarketPrice")
     if not t or not price:
@@ -159,7 +180,7 @@ def _patch_from_meta(frame: pd.DataFrame, meta: dict, tz: str) -> pd.DataFrame:
     ts = pd.Timestamp(int(t), unit="s", tz="UTC").tz_convert(tz)
     day = ts.normalize().tz_localize(None)
     last = frame.index[-1]
-    if ts.hour < 16 or day <= last or np.busday_count(last.date(), day.date()) != 1:
+    if not session_closed(meta, tz) or day <= last or np.busday_count(last.date(), day.date()) != 1:
         return frame
     hi, lo = meta.get("regularMarketDayHigh"), meta.get("regularMarketDayLow")
     row = pd.DataFrame({

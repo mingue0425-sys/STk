@@ -174,11 +174,19 @@ README.md              기간별 요약표 (GitHub 에서 바로 보임)
 latest/1m/, latest/6m/ 기간별 대시보드(index.html) · 종목별 리포트 · summary.md/json
 history/YYYY-MM-DD.md  날짜별 요약 기록 (파일 이름 = 데이터 기준일)
 symbols/<종목>.html    종목별 예측 변화 기록: 상승확률 추이 · 지난 예측 vs 실제 · 날짜별 판정/국면 (symbols/index.html 목록)
+data/news.jsonl        처음 본 관련 뉴스 헤드라인 누적 (제목·링크·시각만, 나중에 뉴스 예측력 검증용)
 track.html             실전 성과 상세: 기간×체크포인트별 적중률 · PIT 분포 · 종목별 예측 범위 vs 실제 주가 차트
 data/forecasts.jsonl   누적 예측 기록 → 날짜가 지나면 자동으로 실제 주가와 비교 (실전 성과)
 data/latest.json       이번 실행 상태: 기준일 · 기간별 성공 종목 수 · 오류 · 데이터 경고 · meta 로 보정한 종목 · 페이지 생성 실패 (점검용)
 alerts.md              흐름 변화·불안 국면 진입·데이터 경고가 있을 때만 생성
 ```
+
+**관련 뉴스·공시 (참고용):** 종목별 기록 페이지에 Yahoo Finance 헤드라인(제목에 회사가 나오는 기사 우선)과
+SEC 공시(8-K·10-Q·10-K, 한국어 항목명)를 보여 줍니다. **예측 계산에는 쓰지 않습니다** — 뉴스가 방향 예측에 도움이 되는지는
+아직 검증되지 않았기 때문에, 헤드라인을 `data/news.jsonl` 에 매일 쌓아 두었다가 충분히 모이면 사전 기준을 정해 검증합니다.
+SEC 는 요청자 식별 정보를 요구하므로 저장소 **Settings → Secrets and variables → Actions** 에 `SEC_USER_AGENT`
+(예: `이름 이메일주소`)를 등록해야 공시가 표시됩니다. 등록하지 않으면 공시만 빠집니다. 뉴스·공시를 못 받아도 실행은 실패하지 않습니다
+(`latest.json` 의 `news` 에 개수만 기록). 로컬에서는 환경변수 `STK_SEC_USER_AGENT`, 끄려면 `--no-news`.
 
 부가 페이지(실전 성과·종목별 기록·지난 기록)를 만들다 오류가 나도 그날 예측 기록과 첫 화면은 먼저 커밋되고,
 실행은 마지막 단계에서 실패로 표시됩니다 (`publish` 종료 코드 3, 내용은 `latest.json` 의 `render_errors`).
@@ -427,6 +435,7 @@ stk/
   publish.py      여러 예측 기간 사이트(첫 화면·기간별 대시보드·README·history·알림) 생성
   tracking.py     예측 기록(JSONL)과 실전 성과 추적
   symbol_page.py  종목별 예측 변화 기록 페이지(symbols/)
+  news.py         관련 뉴스(Yahoo RSS)·SEC 공시 수집, 헤드라인 누적
   track_page.py   실전 성과 페이지(track.html): 적중률 표 · PIT 분포 · 종목별 예측 vs 실제 차트
   earnings.py     실적 발표일 추정 (가격·거래량 패턴)
   sector.py       섹터 ETF 판별 · 위험 분해 · 상대 강도

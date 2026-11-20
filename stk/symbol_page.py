@@ -37,6 +37,12 @@ SYMBOL_CSS = r"""
 .legend i{display:inline-block;width:14px;height:2px;vertical-align:3px;margin-right:6px;border-radius:1px}
 .chg{display:inline-block;margin-left:4px;padding:0 5px;border:1px solid var(--axis);border-radius:999px;font-size:11px;color:var(--text2)}
 .up{color:var(--s0)}.down{color:var(--s7)}
+ul.news{margin:0;padding:0;list-style:none}
+ul.news li{padding:7px 0;border-bottom:1px solid var(--grid);display:flex;justify-content:space-between;gap:12px}
+ul.news li:last-child{border-bottom:0}
+ul.news a{color:var(--text);text-decoration:none}ul.news a:hover{text-decoration:underline}
+.nmeta{flex:none;font-size:12px;color:var(--muted);white-space:nowrap}
+@media (max-width:600px){ul.news li{flex-direction:column;gap:2px}}
 ul.syms{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;padding:0;list-style:none}
 ul.syms a{display:block;padding:8px 10px;border:1px solid var(--grid);border-radius:8px;background:var(--surface);
 color:var(--text);text-decoration:none;font-weight:600}
@@ -151,8 +157,38 @@ def _table(recs: list[dict], horizons_all: list[int]) -> str:
             f'{head}<th class="l">국면</th></tr></thead><tbody>{"".join(reversed(body))}</tbody></table></div>')
 
 
+def _news_card(info: dict | None, now: datetime | None = None) -> str:
+    """관련 뉴스(영문 원문 제목)와 SEC 공시. 정보가 없으면 카드 자체를 생략."""
+    if not info:
+        return ""
+    from .news import recent
+
+    parts = []
+    from .news import mentions
+
+    items = recent(info.get("news") or [], now=now)
+    news = (sorted([n for n in items if mentions(n)], key=lambda n: n["published"], reverse=True)[:8]
+            or items[:5])   # 직접 언급된 기사 우선, 없으면 최근 기사 몇 개
+    if news:
+        li = "".join(
+            f'<li><a href="{e(n["link"])}" rel="noopener noreferrer nofollow" target="_blank">{e(n["title"])}</a>'
+            f'<span class="nmeta">{e(pd.Timestamp(n["published"]).tz_convert("America/New_York").strftime("%m-%d %H:%M"))} · '
+            f'{e(n.get("publisher", ""))}</span></li>' for n in news)
+        parts.append('<section class="card" id="news"><h2>관련 뉴스 <span class="h-sub">Yahoo Finance 헤드라인 원문 · '
+                     '제목에 회사가 나오는 기사 우선 · 예측 계산에는 쓰지 않음</span></h2>'
+                     f'<ul class="news">{li}</ul></section>')
+    fil = (info.get("filings") or [])[:8]
+    if fil:
+        li = "".join(
+            f'<li><a href="{e(f["link"])}" rel="noopener noreferrer nofollow" target="_blank">{e(f["form"])} · {e(f["label"])}</a>'
+            f'<span class="nmeta">{e(f["date"])}</span></li>' for f in fil)
+        parts.append('<section class="card"><h2>최근 공시 <span class="h-sub">SEC EDGAR · 최근 120일 8-K·10-Q·10-K</span></h2>'
+                     f'<ul class="news">{li}</ul></section>')
+    return "".join(parts)
+
+
 def render_symbol_page(symbol: str, recs: list[dict], track: TrackResult | None,
-                       generated: datetime | None = None) -> str:
+                       generated: datetime | None = None, news: dict | None = None) -> str:
     generated = generated or datetime.now()
     recs = sorted(recs, key=lambda r: (r["as_of"], int(r["horizon"])))
     hs = _horizons(recs)
@@ -184,7 +220,7 @@ def render_symbol_page(symbol: str, recs: list[dict], track: TrackResult | None,
             '<a href="../track.html">실전 성과</a></p>'
             f'<h1>{e(symbol)} <span class="h-sub">예측 변화 기록</span></h1>'
             f'<p class="meta">기록 {len(days)}일 ({days[0]} ~ {last}) · 생성 {generated:%Y-%m-%d %H:%M}</p></header>'
-            + prob + band
+            + prob + _news_card(news) + band
             + f'<section class="card"><h2>날짜별 예측 <span class="h-sub">최근 순 · 괄호 = 기대수익</span></h2>{_table(current, hs)}</section>')
     return _page(f"{symbol} 예측 기록", body)
 
@@ -225,7 +261,7 @@ def _page(title: str, body: str) -> str:
 
 
 def write_symbol_pages(site, records: list[dict], track: TrackResult | None, symbols: list[str] | None = None,
-                       generated: datetime | None = None) -> int:
+                       generated: datetime | None = None, news: dict[str, dict] | None = None) -> int:
     """기록이 있는 종목마다 페이지를 쓰고 목록 페이지를 만듭니다. symbols 를 주면 그 종목만 (관심종목에서 빠진 종목 제외)."""
     from pathlib import Path
 
@@ -235,6 +271,6 @@ def write_symbol_pages(site, records: list[dict], track: TrackResult | None, sym
     out = Path(site) / "symbols"
     out.mkdir(parents=True, exist_ok=True)
     for sym, recs in by_sym.items():
-        (out / f"{sym}.html").write_text(render_symbol_page(sym, recs, track, generated), encoding="utf-8")
+        (out / f"{sym}.html").write_text(render_symbol_page(sym, recs, track, generated, (news or {}).get(sym)), encoding="utf-8")
     (out / "index.html").write_text(render_symbol_index(by_sym, generated), encoding="utf-8")
     return len(by_sym)

@@ -11,6 +11,7 @@ site/
   history/YYYY-MM-DD.md   날짜별 요약 (파일 이름 = 데이터 기준일, 실행한 날 아님) + 같은 이름의 .html
   history/index.html      지난 기록 목록 (GitHub Pages 는 폴더 목록을 보여 주지 않으므로 직접 생성)
   data/forecasts.jsonl    누적 예측 기록 (실전 성과 추적용)
+  data/news.jsonl         처음 본 관련 뉴스 헤드라인 누적 (제목·링크·시각만 — 나중에 예측력 검증용)
   data/latest.json        이번 실행 상태 (기준일 · 기간별 종목 수 · 오류 · 데이터 경고)
   alerts.md               흐름 변화·국면 급변·데이터 경고가 있을 때만 생성 (알림용)
 """
@@ -273,6 +274,29 @@ def _prefix_links(md: str, prefix: str) -> str:
     return re.sub(r"\]\(([A-Za-z0-9._-]+\.html)\)", lambda m: f"]({prefix}{m.group(1)})", md)
 
 
+def _collect_news(fetcher, symbols: list[str], archive: Path) -> tuple[dict, dict | None]:
+    """참고용 뉴스·공시 수집. 어떤 실패도 실행을 실패시키지 않도록 별도로 처리 (render_errors 에 넣지 않음)."""
+    if fetcher is None:
+        return {}, None
+    from .news import append_archive, recent
+
+    try:
+        info = fetcher(symbols) or {}
+    except Exception as err:  # noqa: BLE001
+        return {}, {"error": type(err).__name__}
+    try:
+        archived = append_archive(archive, info)
+    except OSError as err:
+        archived = f"error: {type(err).__name__}"
+    return info, {
+        "symbols_with_news": sum(1 for v in info.values() if recent(v.get("news") or [])),
+        "headlines": sum(len(v.get("news") or []) for v in info.values()),
+        "new_archived": archived,
+        "filings": sum(len(v.get("filings") or []) for v in info.values()),
+        "errors": sum(len(v.get("errors") or []) for v in info.values()),
+    }
+
+
 def publish_site(
     symbols: list[str],
     site: str | Path,
@@ -286,6 +310,7 @@ def publish_site(
     jobs: int | None = None,
     progress: bool = False,
     generated: datetime | None = None,
+    news_fetcher=None,
 ) -> PublishResult:
     """기간별 예측 → 기록 → 실전 성과 → 대시보드·첫 화면·README·history·alerts 생성."""
     site = Path(site)
@@ -347,7 +372,8 @@ def publish_site(
     (site / "index.html").write_text(_landing(runs, track, per_h, generated), encoding="utf-8")
     if track is not None:
         guarded("실전 성과 페이지", lambda: (site / "track.html").write_text(render_track_page(track, generated, symbol_href="symbols/{sym}.html"), encoding="utf-8"))
-    guarded("종목별 기록 페이지", lambda: write_symbol_pages(site, records, track, symbols, generated))
+    news_info, news_status = _collect_news(news_fetcher, symbols, site / "data" / "news.jsonl")
+    guarded("종목별 기록 페이지", lambda: write_symbol_pages(site, records, track, symbols, generated, news_info))
     readme = "# 관심종목 흐름 예측\n\n" + "\n\n".join(md_parts)
     if alerts:
         readme += "\n\n## 알림\n\n" + "\n".join(f"- {a}" for a in alerts)
@@ -364,6 +390,7 @@ def publish_site(
         "data_warnings": [f"{it.symbol}: {w}" for it in (runs[0].ok if runs else []) for w in it.forecast.data_warnings],
         "meta_patched": sorted({it.symbol for r in runs for it in r.ok if it.patched}),
         "render_errors": render_errors,
+        "news": news_status,
         "alerts": len(alerts),
     }
     (site / "data" / "latest.json").write_text(json.dumps(status, ensure_ascii=False, indent=1), encoding="utf-8")

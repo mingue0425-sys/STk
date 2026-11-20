@@ -187,6 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--jobs", type=int, default=None, help="병렬 작업 수")
     pb.add_argument("--summary-md", metavar="FILE", help="README 요약을 이 파일에 덧붙임 (예: $GITHUB_STEP_SUMMARY)")
     pb.add_argument("--log", help="예측 기록 파일 (기본: <site>/data/forecasts.jsonl)")
+    pb.add_argument("--no-news", action="store_true",
+                    help="관련 뉴스·SEC 공시를 받지 않음 (공시는 환경변수 STK_SEC_USER_AGENT 가 있을 때만)")
     _add_common(pb)
 
     t = sub.add_parser("track", help="저장된 예측 기록을 실제 주가와 비교 (실전 성과)")
@@ -466,6 +468,12 @@ def _cmd_watch(args) -> int:
     return 0
 
 
+def _news_fetcher():
+    from .news import default_fetcher
+
+    return default_fetcher
+
+
 def _cmd_publish(args) -> int:
     from .market import market_context
     from .publish import publish_site
@@ -503,7 +511,8 @@ def _cmd_publish(args) -> int:
 
     print(f"{len(symbols)}개 종목 × {len(horizons)}개 기간 예측 중 ({', '.join(str(h) for h in horizons)}거래일)...")
     res = publish_site(symbols, args.site, horizons, _forecast_kwargs(args, ctx, market), log, loader, years=args.years,
-                       cache_dir=ctx["cache_dir"], refresh=args.refresh, jobs=args.jobs, progress=sys.stdout.isatty())
+                       cache_dir=ctx["cache_dir"], refresh=args.refresh, jobs=args.jobs, progress=sys.stdout.isatty(),
+                       news_fetcher=None if args.no_news else _news_fetcher())
     failed = {it.symbol: it.error for run in res.runs for it in run.items if it.error}
     for sym, err in failed.items():
         print(_error_text(sym, ValueError(err)), file=sys.stderr)

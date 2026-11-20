@@ -161,7 +161,7 @@ def test_cli_publish_returns_3_when_only_pages_fail(tmp_path, monkeypatch, capsy
     monkeypatch.setattr(pub, "write_symbol_pages", boom)
     site = tmp_path / "site"
     code = main(["publish", "AAA", "--horizons", "1m", "--site", str(site), "--benchmark", "none", "--rf", "0.04",
-                 "--no-market", "-n", "200", "--jobs", "1", "--no-cache"])
+                 "--no-market", "-n", "200", "--jobs", "1", "--no-cache", "--no-news"])
     assert code == 3 and "페이지 생성 실패" in capsys.readouterr().err
     assert (site / "data" / "forecasts.jsonl").exists() and (site / "index.html").exists()
 
@@ -173,3 +173,23 @@ def test_unfinished_intraday_bar_is_dropped():
     assert f.index[-1] == pd.Timestamp("2026-11-11") and len(f) == 1
     closed = int(pd.Timestamp("2026-11-12 16:00", tz="America/New_York").timestamp())
     assert parse_yahoo_chart(_payload(closed), "META").index[-1] == pd.Timestamp("2026-11-12")
+
+
+def test_early_close_day_bar_is_kept_and_patched():
+    def ny(x):
+        return int(pd.Timestamp(x, tz="America/New_York").timestamp())
+
+    # 11-27(금) 13:00 조기 폐장: 마감 후 시각이 13:00 이어도 장이 끝난 것으로 봐야 함
+    period = {"regular": {"start": ny("2026-11-27 09:30"), "end": ny("2026-11-27 13:00")}}
+    pay = _payload(ny("2026-11-27 13:00"))
+    pay["chart"]["result"][0]["timestamp"] = [ny("2026-11-25 09:30"), ny("2026-11-27 09:30")]
+    pay["chart"]["result"][0]["meta"]["currentTradingPeriod"] = period
+    assert parse_yahoo_chart(pay, "SPY").index[-1] == pd.Timestamp("2026-11-27")      # 완성된 봉 유지
+    pay["chart"]["result"][0]["meta"]["regularMarketTime"] = ny("2026-11-27 11:00")   # 조기 폐장일 장중
+    assert parse_yahoo_chart(pay, "SPY").index[-1] == pd.Timestamp("2026-11-25")
+    # 일봉에 11-27 이 빠졌고 meta 에 13:00 종가가 있으면 채움
+    pay2 = _payload(ny("2026-11-27 13:00"))
+    pay2["chart"]["result"][0]["timestamp"] = [ny("2026-11-24 09:30"), ny("2026-11-25 09:30")]
+    pay2["chart"]["result"][0]["meta"]["currentTradingPeriod"] = period
+    f = parse_yahoo_chart(pay2, "SPY")
+    assert f.index[-1] == pd.Timestamp("2026-11-25")   # 11-26 휴장이라 '바로 다음 평일' 이 아님 → 보수적으로 안 채움

@@ -37,3 +37,14 @@ def bench():
 def _isolated_forecast_log(tmp_path, monkeypatch):
     """테스트 중 예측 기록이 사용자 홈에 쌓이지 않도록 임시 파일로 돌립니다."""
     monkeypatch.setenv("STK_LOG", str(tmp_path / "forecasts.jsonl"))
+
+
+@pytest.fixture(autouse=True)
+def _no_news_network(monkeypatch):
+    """테스트는 뉴스·공시 사이트에 접속하지 않음 (가짜 수집기를 직접 넘기는 테스트만 사용)."""
+    from stk import news
+
+    def blocked(*a, **k):
+        raise RuntimeError("테스트 중 네트워크 차단")
+    monkeypatch.setattr(news, "fetch_news", blocked)
+    monkeypatch.setattr(news, "fetch_filings", blocked)
