@@ -110,7 +110,8 @@ def test_compute_changes_and_flip_threshold():
     it = _item("AAA", px)
     fc = it.forecast
     base = forecast_record(fc)
-    prev_small = dict(base, as_of="2020-01-01", prob_up=fc.mix_prob_up - 0.01, outlook="다른 판정", regime="저변동(안정)")
+    prev_small = dict(base, as_of="2020-01-01", prob_up=fc.mix_prob_up - 0.01, outlook="다른 판정",
+                      direction=fc.outlook.direction - 1, regime="저변동(안정)")
     ch = compute_changes([it], [prev_small])["AAA"]
     assert ch.d_prob_up == pytest.approx(0.01)
     assert not ch.outlook_changed           # 1%p 변화는 경계값 흔들림으로 간주
@@ -121,6 +122,9 @@ def test_compute_changes_and_flip_threshold():
     # 같은 기준일 기록이나 다른 기간·모델 기록은 비교 대상이 아님
     assert compute_changes([it], [dict(base)]) == {}
     assert compute_changes([it], [dict(prev_big, horizon=999)]) == {}
+    # 판정 문구만 바뀌고 방향 코드가 같으면 흐름 변화가 아님 (버전 간 문구 변경 대비)
+    same_dir = dict(prev_big, outlook="예전 문구", direction=fc.outlook.direction)
+    assert not compute_changes([it], [same_dir])["AAA"].outlook_changed
 
 
 def test_dashboard_and_markdown_with_changes_and_track():

@@ -126,7 +126,7 @@ def _table(recs: list[dict], horizons_all: list[int]) -> str:
                 cells.append('<td class="muted">-</td><td class="muted">-</td>')
                 continue
             p = prev.get(h)
-            flip = p is not None and p.get("outlook") != r.get("outlook")
+            flip = p is not None and p.get("direction", p.get("outlook")) != r.get("direction", r.get("outlook"))
             pu = r.get("prob_up")
             er = r.get("expected_return")
             cells.append(

@@ -130,7 +130,20 @@ def parse_yahoo_chart(payload: dict, symbol: str = "") -> pd.DataFrame:
     frame = frame[~frame.index.duplicated(keep="last")].sort_index()
     if frame.empty:
         raise DataError(f"{symbol}: 유효한 종가가 없습니다")
-    return _patch_from_meta(frame, res.get("meta") or {}, tz)
+    meta = res.get("meta") or {}
+    return _patch_from_meta(_drop_unfinished(frame, meta, tz), meta, tz)
+
+
+def _drop_unfinished(frame: pd.DataFrame, meta: dict, tz: str) -> pd.DataFrame:
+    """장중에 받으면 Yahoo 는 오늘 봉을 '현재가'로 채워 줍니다. 아직 끝나지 않은 날이라 예측 기준일로 쓰지 않도록 뺍니다.
+    (meta 의 마지막 거래 시각이 마지막 봉과 같은 날이고 16:00 뉴욕 시각 전이면 장중으로 봄)"""
+    t = meta.get("regularMarketTime")
+    if not t or len(frame) < 2:
+        return frame
+    ts = pd.Timestamp(int(t), unit="s", tz="UTC").tz_convert(tz)
+    if ts.hour < 16 and ts.normalize().tz_localize(None) == frame.index[-1]:
+        return frame.iloc[:-1]
+    return frame
 
 
 def _patch_from_meta(frame: pd.DataFrame, meta: dict, tz: str) -> pd.DataFrame:

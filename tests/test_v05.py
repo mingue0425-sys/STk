@@ -179,7 +179,7 @@ def test_publish_site_structure_and_alerts(tmp_path, monkeypatch):
     assert 'href="../3m/index.html"' in (site / "latest/1m/index.html").read_text(encoding="utf-8")
     # 직전 예측(더 이른 기준일, 다른 판정)을 기록에 넣고 다시 실행 → 흐름 변화 알림
     rec = forecast_record(res.runs[0].items[0].forecast)
-    rec.update(as_of="2020-01-01", prob_up=rec["prob_up"] - 0.2, outlook="뚜렷한 하락 흐름",
+    rec.update(as_of="2020-01-01", prob_up=rec["prob_up"] - 0.2, outlook="뚜렷한 하락 흐름", direction=-2,
                id="AAA|2020-01-01|21|ensemble")
     with open(log, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec, ensure_ascii=False) + "\n")

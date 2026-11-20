@@ -119,7 +119,7 @@ def _landing(runs: list[HorizonRun], track: TrackResult | None, per_h: dict[int,
   <h2>{e(horizon_label(run.horizon))} 전망 <span class="h-sub">{run.horizon}거래일 · {len(run.ok)}종목</span></h2>
   <div class="kpis three">
     <div class="kpi"><div class="kpi-label">상승 우위</div><div class="kpi-value">{counts['up']}</div></div>
-    <div class="kpi"><div class="kpi-label">횡보</div><div class="kpi-value">{counts['flat']}</div></div>
+    <div class="kpi"><div class="kpi-label">방향 우위 없음</div><div class="kpi-value">{counts['flat']}</div></div>
     <div class="kpi"><div class="kpi-label">하락 우위</div><div class="kpi-value">{counts['down']}</div></div>
   </div>
   <p class="lead">상승확률 상위: {e(', '.join(f"{it.symbol} {it.forecast.mix_prob_up:.0%}" for it in top))}</p>
@@ -151,6 +151,10 @@ def _landing(runs: list[HorizonRun], track: TrackResult | None, per_h: dict[int,
   <p class="meta">{meta}</p>
 </header>
 <div class="hgrid">{''.join(cards)}</div>
+<p class="note" style="margin:0 0 16px">읽는 법: 이 모델의 강점은 <b>움직일 범위</b>(50%·90% 구간)이고, 오를지 내릴지 <b>방향</b>은 아닙니다.
+2017~2026년 20종목 1개월 백테스트에서 구간은 실제와 잘 맞았지만(50% 구간 49%, 90% 구간 90%),
+상승확률은 '그 종목이 과거에 오른 비율'보다 나은 예측력을 보이지 않았습니다. 그래서 대부분 종목이 '뚜렷한 방향 우위 없음'으로 나옵니다.
+<a href="https://github.com/mingue0425-sys/STk/blob/claude/scenario-stock-forecaster/docs/direction_study.md">점검 결과</a></p>
 <section class="card"><h2>실전 성과 <span class="h-sub">기록해 둔 과거 예측 vs 실제 주가</span></h2>{track_txt}<a class="go" href="track.html">자세히 보기 — 종목별 예측 vs 실제 차트 →</a></section>
 <p class="note">종목별 기록: <a href="symbols/index.html">예측 변화 추이</a> · 지난 기록: <a href="history/index.html">날짜별 요약</a> · 예측 기록: <a href="data/forecasts.jsonl">forecasts.jsonl</a> · 실행 상태: <a href="data/latest.json">latest.json</a></p>
 <footer class="foot">{e(DISCLAIMER)}</footer>

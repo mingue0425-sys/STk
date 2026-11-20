@@ -84,7 +84,7 @@ def test_matured_final_checkpoint_renders_everywhere(tmp_path):
 
 # ---- v0.7: 종목별 기록 페이지 · 부가 페이지 실패 보호 · meta 보정 표시 ----
 
-def _logrec(sym, as_of, horizon, prob, outlook="방향성 약한 횡보 흐름", regime="중간 변동"):
+def _logrec(sym, as_of, horizon, prob, outlook="뚜렷한 방향 우위 없음", regime="중간 변동"):
     r = _record(sym, as_of, horizon, 100.0, "2099-01-01")
     r.update(prob_up=prob, expected_return=prob - 0.5, outlook=outlook, regime=regime)
     return r
@@ -164,3 +164,12 @@ def test_cli_publish_returns_3_when_only_pages_fail(tmp_path, monkeypatch, capsy
                  "--no-market", "-n", "200", "--jobs", "1", "--no-cache"])
     assert code == 3 and "페이지 생성 실패" in capsys.readouterr().err
     assert (site / "data" / "forecasts.jsonl").exists() and (site / "index.html").exists()
+
+
+def test_unfinished_intraday_bar_is_dropped():
+    # 마지막 봉(11-12)과 같은 날 장중(11:00) 시각 → 오늘 봉은 아직 끝나지 않음
+    intraday_same_day = int(pd.Timestamp("2026-11-12 11:00", tz="America/New_York").timestamp())
+    f = parse_yahoo_chart(_payload(intraday_same_day), "META")
+    assert f.index[-1] == pd.Timestamp("2026-11-11") and len(f) == 1
+    closed = int(pd.Timestamp("2026-11-12 16:00", tz="America/New_York").timestamp())
+    assert parse_yahoo_chart(_payload(closed), "META").index[-1] == pd.Timestamp("2026-11-12")

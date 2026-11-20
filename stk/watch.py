@@ -170,6 +170,12 @@ def _retry_stale(items: dict[str, WatchItem], opts: dict) -> None:
         items[sym] = new
 
 
+def _direction_of(rec: dict) -> int | None:
+    """기록의 흐름 방향 코드 (-2~2). 문구는 버전마다 바뀔 수 있어 비교는 코드로 합니다."""
+    d = rec.get("direction")
+    return int(d) if d is not None else None
+
+
 def compute_changes(items: list[WatchItem], records: list[dict]) -> dict[str, Change]:
     """예측 기록에서 직전 예측(기준일이 더 이른 것 중 최신)을 찾아 변화를 계산합니다."""
     out: dict[str, Change] = {}
@@ -192,7 +198,7 @@ def compute_changes(items: list[WatchItem], records: list[dict]) -> dict[str, Ch
             d_expected=(fc.mix_expected_price / fc.s0 - 1) - float(p["expected_return"]),
             prev_outlook=p.get("outlook", ""),
             # 경계값 부근의 미세한 흔들림(예: 55%↔54%)은 흐름 변화로 보지 않음
-            outlook_changed=p.get("outlook") != fc.outlook.label and abs(fc.mix_prob_up - float(p["prob_up"])) >= FLIP_MIN_DELTA,
+            outlook_changed=_direction_of(p) != fc.outlook.direction and abs(fc.mix_prob_up - float(p["prob_up"])) >= FLIP_MIN_DELTA,
             prev_regime=p.get("regime"),
             regime_changed=bool(p.get("regime")) and p.get("regime") != regime_now,
         )
@@ -353,7 +359,7 @@ def render_dashboard(
     summary = [
         ("분석 종목", f"{len(ok)} / {len(items)}"),
         ("상승 우위", f"{counts['up']}"),
-        ("횡보", f"{counts['flat']}"),
+        ("방향 우위 없음", f"{counts['flat']}"),
         ("하락 우위", f"{counts['down']}"),
     ]
     avg_up = np.mean([it.forecast.outlook.prob_up for it in ok]) if ok else float("nan")

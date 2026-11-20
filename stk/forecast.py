@@ -720,7 +720,7 @@ def judge_outlook(
     elif prob_up >= 0.55:
         label, direction = "완만한 상승 흐름", 1
     elif prob_up > 0.45:
-        label, direction = "방향성 약한 횡보 흐름", 0
+        label, direction = "뚜렷한 방향 우위 없음", 0
     elif prob_up > 0.35:
         label, direction = "완만한 하락 흐름", -1
     else:
