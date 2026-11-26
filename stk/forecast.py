@@ -9,27 +9,15 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass, field
-from functools import lru_cache
 
 import numpy as np
 import pandas as pd
-from pandas.tseries.holiday import (
-    AbstractHolidayCalendar,
-    GoodFriday,
-    Holiday,
-    USLaborDay,
-    USMartinLutherKingJr,
-    USMemorialDay,
-    USPresidentsDay,
-    USThanksgivingDay,
-    nearest_workday,
-)
-from pandas.tseries.offsets import CustomBusinessDay
 
 from .analysis import TRADING_DAYS, MarketStats, _price_series, analyze, estimate_event_std, log_returns
 from .data import check_prices
 from .earnings import EarningsModel, fit_earnings
 from .market import MarketContext
+from .nyse import NYSECalendar, future_trading_days  # noqa: F401 - 예전 위치에서 가져다 쓰는 코드 호환
 from .regime import HMMParams, RegimeState, build_regime_state, simulate_regime_paths
 from .scenarios import (
     DEFAULT_ERP,
@@ -55,34 +43,6 @@ DEFAULT_MODEL = "ensemble"
 DEFAULT_REGIME_WEIGHT = 0.7   # 백테스트(10종목, 3·6개월)에서 정확도·구간 보정이 가장 균형 잡힌 값
 DEFAULT_AUTO_EVENTS = False   # 추정 실적일을 시뮬레이션에 반영할지 (백테스트상 개선 없음 → 기본 끔, 표시만 함)
 DEFAULT_TREND_ON = False      # 추세 점수로 시나리오 확률 조정 (백테스트상 평균적으로 도움이 안 돼 기본 끔)
-
-
-class NYSECalendar(AbstractHolidayCalendar):
-    """NYSE 정규 휴장일 근사 (임시 휴장 제외)."""
-
-    rules = [
-        Holiday("NewYearsDay", month=1, day=1, observance=nearest_workday),
-        USMartinLutherKingJr,
-        USPresidentsDay,
-        GoodFriday,
-        USMemorialDay,
-        Holiday("Juneteenth", month=6, day=19, start_date="2022-01-01", observance=nearest_workday),
-        Holiday("IndependenceDay", month=7, day=4, observance=nearest_workday),
-        USLaborDay,
-        USThanksgivingDay,
-        Holiday("Christmas", month=12, day=25, observance=nearest_workday),
-    ]
-
-
-@lru_cache(maxsize=1)
-def _nyse_offset() -> CustomBusinessDay:
-    holidays = NYSECalendar().holidays(start="1990-01-01", end="2045-12-31")
-    return CustomBusinessDay(holidays=holidays)
-
-
-def future_trading_days(last_date: pd.Timestamp, horizon: int) -> pd.DatetimeIndex:
-    offset = _nyse_offset()
-    return pd.date_range(last_date + offset, periods=horizon, freq=offset)
 
 
 @dataclass

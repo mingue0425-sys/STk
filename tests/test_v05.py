@@ -243,7 +243,8 @@ def test_stale_symbol_is_refetched(tmp_path, monkeypatch):
 
 
 def test_stale_symbol_still_late_gets_warning(tmp_path, monkeypatch):
-    full = {s: make_prices(n=600, seed=i) for i, s in enumerate(["AAA", "BBB", "CCC"])}
+    # 합성 일봉은 휴장일 없이 평일만 쓰므로, 마지막 며칠이 NYSE 휴장일(예: 성금요일)에 걸리지 않는 길이를 씀
+    full = {s: make_prices(n=610, seed=i) for i, s in enumerate(["AAA", "BBB", "CCC"])}
     monkeypatch.setattr(watch_mod, "get_history",
                         lambda sym, **kw: full[sym].iloc[:-2] if sym == "CCC" else full[sym])
     monkeypatch.setattr(watch_mod, "STALE_RETRY_WAIT", 0.0)

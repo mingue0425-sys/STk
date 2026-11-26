@@ -25,6 +25,7 @@ from .forecast import Forecast, run_forecast
 from .html_report import CSS as REPORT_CSS
 from .html_report import render_html
 from .narrative import narrative_text
+from .nyse import sessions_between
 from .report import DISCLAIMER, money, pct
 
 FLIP_MIN_DELTA = 0.02  # 흐름 판정이 바뀌었다고 표시할 최소 상승확률 변화
@@ -83,7 +84,7 @@ def _forecast_one(symbol: str, opts: dict) -> WatchItem:
         fc = run_forecast(prices, symbol, **opts["forecast"])
         expect = opts.get("expect_date")
         if expect is not None and fc.stats.last_date < expect:
-            lag = int(np.busday_count(fc.stats.last_date.date(), expect.date()))
+            lag = sessions_between(fc.stats.last_date, expect)
             fc.data_warnings.append(
                 f"다른 종목보다 데이터가 {lag}거래일 늦습니다 (마지막 {fc.stats.last_date:%Y-%m-%d}, 다른 종목 {expect:%Y-%m-%d}) "
                 "— 데이터 제공처 지연으로 이전 날짜 기준 예측입니다")
@@ -160,7 +161,7 @@ def _retry_stale(items: dict[str, WatchItem], opts: dict) -> None:
         old = items[sym]
         new = _forecast_one(sym, retry_opts)
         if new.forecast is None:  # 재시도 자체가 실패 → 기존 결과에 경고만 추가
-            lag = int(np.busday_count(old.forecast.stats.last_date.date(), ref.date()))
+            lag = sessions_between(old.forecast.stats.last_date, ref)
             old.forecast.data_warnings.append(
                 f"다른 종목보다 데이터가 {lag}거래일 늦습니다 (마지막 {old.forecast.stats.last_date:%Y-%m-%d}, "
                 f"다른 종목 {ref:%Y-%m-%d})")

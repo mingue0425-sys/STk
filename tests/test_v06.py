@@ -192,4 +192,5 @@ def test_early_close_day_bar_is_kept_and_patched():
     pay2["chart"]["result"][0]["timestamp"] = [ny("2026-11-24 09:30"), ny("2026-11-25 09:30")]
     pay2["chart"]["result"][0]["meta"]["currentTradingPeriod"] = period
     f = parse_yahoo_chart(pay2, "SPY")
-    assert f.index[-1] == pd.Timestamp("2026-11-25")   # 11-26 휴장이라 '바로 다음 평일' 이 아님 → 보수적으로 안 채움
+    assert f.index[-1] == pd.Timestamp("2026-11-27")   # 11-26 은 휴장 → 11-27 이 11-25 의 바로 다음 거래일이므로 채움
+    assert f["close"].iloc[-1] == 641.69 and pd.isna(f["open"].iloc[-1])
