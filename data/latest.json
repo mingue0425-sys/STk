@@ -1,6 +1,6 @@
 {
  "as_of": "2026-11-25",
- "generated": "2026-11-26T04:12:37",
+ "generated": "2026-11-27T04:19:18",
  "horizons": {
   "1m": {
    "ok": 20,
@@ -17,8 +17,8 @@
  "render_errors": [],
  "news": {
   "symbols_with_news": 20,
-  "headlines": 362,
-  "new_archived": 299,
+  "headlines": 377,
+  "new_archived": 266,
   "filings": 0,
   "errors": 0
  },
